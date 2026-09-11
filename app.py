@@ -31,6 +31,7 @@ from comparador_nfl import (
     obtener_lineas_apuestas,
     obtener_noticias_nfl,
     obtener_lesiones_liga,
+    obtener_standings,
     logo_url,
     favorito_segun_mercado,
     comparar_equipos,
@@ -95,6 +96,11 @@ def noticias_cacheadas(limite: int = 10):
 @st.cache_data(show_spinner=False, ttl=900)
 def lesiones_liga_cacheadas(limite: int = 25):
     return obtener_lesiones_liga(limite)
+
+
+@st.cache_data(show_spinner=False, ttl=900)
+def standings_cacheados():
+    return obtener_standings()
 
 
 def ejecutar_comparacion(stats, equipo_a, equipo_b, local, usar_clima, usar_odds):
@@ -211,6 +217,10 @@ if st.session_state.pagina == "inicio":
         st.session_state.pagina = "pronosticos"
         st.rerun()
 
+    if st.button("📊 Estadísticas (tabla de posiciones)", use_container_width=True):
+        st.session_state.pagina = "estadisticas"
+        st.rerun()
+
     st.divider()
     st.subheader("📰 Noticias recientes")
     with st.spinner("Cargando noticias..."):
@@ -251,6 +261,33 @@ if st.session_state.pagina == "inicio":
         df_lesiones["equipo"] = df_lesiones["equipo"].map(lambda a: NOMBRES_EQUIPO.get(a, a))
         columnas = [c for c in ["equipo", "jugador", "posicion", "estado", "detalle"] if c in df_lesiones.columns]
         st.dataframe(df_lesiones[columnas], use_container_width=True, hide_index=True)
+
+    st.stop()
+
+
+# ============================================================
+# PANTALLA: ESTADÍSTICAS — tabla de posiciones de la liga
+# ============================================================
+if st.session_state.pagina == "estadisticas":
+    if st.button("← Volver a inicio"):
+        st.session_state.pagina = "inicio"
+        st.rerun()
+
+    st.title("📊 Tabla de posiciones")
+    with st.spinner("Cargando tabla de posiciones..."):
+        try:
+            standings = standings_cacheados()
+            if standings.empty:
+                st.info("No se pudo cargar la tabla de posiciones.")
+            else:
+                for conf in standings["Conferencia"].unique():
+                    st.subheader(conf)
+                    st.dataframe(
+                        standings[standings["Conferencia"] == conf].drop(columns=["Conferencia"]),
+                        use_container_width=True, hide_index=True,
+                    )
+        except Exception as e:
+            st.error(f"No se pudo cargar la tabla de posiciones: {e}")
 
     st.stop()
 
@@ -391,8 +428,10 @@ with tab_proxima:
         value=datetime.date.today().year, key="season_auto",
     )
     buscar_proxima = st.button("🔮 Pronosticar próxima semana", type="primary", use_container_width=True)
-
     if buscar_proxima:
+        st.session_state.mostrar_proxima = True
+
+    if st.session_state.get("mostrar_proxima"):
         with st.spinner("Buscando la próxima semana con partidos pendientes..."):
             try:
                 partidos = obtener_proximos_partidos(season_auto)
@@ -458,8 +497,10 @@ with tab_manual:
     week_sem = col_b.number_input("Semana", min_value=1, max_value=22, value=1, key="week_sem")
 
     cargar_semana = st.button("📅 Cargar y comparar semana", type="primary", use_container_width=True)
-
     if cargar_semana:
+        st.session_state.mostrar_semana = True
+
+    if st.session_state.get("mostrar_semana"):
         with st.spinner(f"Buscando calendario de la semana {week_sem}..."):
             try:
                 partidos = obtener_calendario_semana(season_sem, week_sem)
