@@ -609,18 +609,46 @@ def favorito_segun_mercado(odds_df: pd.DataFrame, equipo_a: str, equipo_b: str) 
 # ---------------------------------------------------------------------------
 # 6. SISTEMA DE PUNTAJE COMPARATIVO
 # ---------------------------------------------------------------------------
+def _score_1_a_10(valor: float, minimo: float, maximo: float, invertir: bool = False) -> float:
+    """
+    Convierte un valor a una calificación de 1 a 10 según dónde cae entre
+    el mínimo y el máximo de TODA LA LIGA para esa métrica (1 = el peor
+    equipo de la liga en esa métrica, 10 = el mejor). invertir=True para
+    métricas donde un valor más bajo es mejor (ej. puntos permitidos).
+    """
+    if maximo == minimo:
+        return 5.5  # todos los equipos empatados en esa métrica
+    pct = (valor - minimo) / (maximo - minimo)
+    if invertir:
+        pct = 1 - pct
+    pct = min(max(pct, 0.0), 1.0)
+    return 1 + 9 * pct
+
+
 def comparar_equipos(stats: pd.DataFrame, equipo_a: str, equipo_b: str,
                       local: str = None, favorito_mercado: str = None,
                       clima_local: dict = None) -> dict:
     """
-    Compara dos equipos usando WEIGHTS y devuelve el puntaje total de cada uno
-    más el desglose por categoría.
+    Compara dos equipos usando WEIGHTS y devuelve el puntaje total de cada
+    uno más el desglose por categoría.
+
+    A diferencia de un esquema "el que va mejor se lleva todos los puntos",
+    cada equipo recibe una calificación de 1 a 10 en cada métrica según su
+    posición relativa a TODA LA LIGA (no solo contra el rival), y los
+    puntos de esa categoría se reparten proporcionalmente a esa
+    calificación. Así un equipo apenas mejor que otro se refleja como
+    apenas mejor, no como si arrasara en la categoría.
 
     favorito_mercado: resultado de favorito_segun_mercado() — suma puntos
         de "linea_apuestas" al equipo que el mercado favorece.
     clima_local: resultado de obtener_clima_estadio() para el equipo local —
         si hay viento fuerte (>25 km/h) o lluvia, favorece ligeramente al
         equipo con más peso en el ataque terrestre (proxy simple).
+
+    Nota: localía, clima y línea de apuestas siguen siendo bonos de
+    contexto (no son estadísticas de rendimiento de todo el año), así que
+    se mantienen como antes — van completos a un solo equipo, no se
+    reparten en escala 1-10.
     """
     a = stats[stats["team"] == equipo_a].iloc[0]
     b = stats[stats["team"] == equipo_b].iloc[0]
@@ -642,21 +670,46 @@ def comparar_equipos(stats: pd.DataFrame, equipo_a: str, equipo_b: str,
     for peso_key, columna, menor_es_mejor in comparaciones:
         peso = WEIGHTS.get(peso_key, 0)
         val_a, val_b = a[columna], b[columna]
-        if menor_es_mejor:
-            ganador = equipo_a if val_a < val_b else equipo_b
-        else:
-            ganador = equipo_a if val_a > val_b else equipo_b
-        puntaje[ganador] += peso
-        desglose.append((peso_key, equipo_a, val_a, equipo_b, val_b, ganador, peso))
+        minimo, maximo = stats[columna].min(), stats[columna].max()
+
+        score_a = _score_1_a_10(val_a, minimo, maximo, invertir=menor_es_mejor)
+        score_b = _score_1_a_10(val_b, minimo, maximo, invertir=menor_es_mejor)
+
+        pts_a = peso * score_a / 10
+        pts_b = peso * score_b / 10
+        puntaje[equipo_a] += pts_a
+        puntaje[equipo_b] += pts_b
+
+        desglose.append({
+            "categoria": peso_key, "peso": peso,
+            "equipo_a": equipo_a, "valor_a": val_a, "score_a": round(score_a, 1), "puntos_a": round(pts_a, 2),
+            "equipo_b": equipo_b, "valor_b": val_b, "score_b": round(score_b, 1), "puntos_b": round(pts_b, 2),
+        })
 
     if local:
+        pts_a = HOME_FIELD_BONUS if local == equipo_a else 0.0
+        pts_b = HOME_FIELD_BONUS if local == equipo_b else 0.0
         puntaje[local] += HOME_FIELD_BONUS
-        desglose.append(("local", local, "N/A", "-", "-", local, HOME_FIELD_BONUS))
+        desglose.append({
+            "categoria": "local", "peso": HOME_FIELD_BONUS,
+            "equipo_a": equipo_a, "valor_a": "local" if local == equipo_a else "visitante",
+            "score_a": "-", "puntos_a": round(pts_a, 2),
+            "equipo_b": equipo_b, "valor_b": "local" if local == equipo_b else "visitante",
+            "score_b": "-", "puntos_b": round(pts_b, 2),
+        })
 
     if favorito_mercado and favorito_mercado in puntaje:
         peso = WEIGHTS.get("linea_apuestas", 0)
+        pts_a = peso if favorito_mercado == equipo_a else 0.0
+        pts_b = peso if favorito_mercado == equipo_b else 0.0
         puntaje[favorito_mercado] += peso
-        desglose.append(("linea_apuestas", equipo_a, "-", equipo_b, "-", favorito_mercado, peso))
+        desglose.append({
+            "categoria": "linea_apuestas", "peso": peso,
+            "equipo_a": equipo_a, "valor_a": "favorito" if favorito_mercado == equipo_a else "-",
+            "score_a": "-", "puntos_a": round(pts_a, 2),
+            "equipo_b": equipo_b, "valor_b": "favorito" if favorito_mercado == equipo_b else "-",
+            "score_b": "-", "puntos_b": round(pts_b, 2),
+        })
 
     if clima_local and not clima_local.get("techo_cerrado") and not clima_local.get("error"):
         condiciones_dificiles = clima_local.get("viento_kmh", 0) > 25 or clima_local.get("lluvia")
@@ -664,8 +717,14 @@ def comparar_equipos(stats: pd.DataFrame, equipo_a: str, equipo_b: str,
             # Proxy simple: favorece a quien tiene más yardas por tierra (ataque más "clima-resistente")
             peso = WEIGHTS.get("clima", 0)
             ganador_clima = equipo_a if a["yardas_run"] > b["yardas_run"] else equipo_b
+            pts_a = peso if ganador_clima == equipo_a else 0.0
+            pts_b = peso if ganador_clima == equipo_b else 0.0
             puntaje[ganador_clima] += peso
-            desglose.append(("clima", equipo_a, a["yardas_run"], equipo_b, b["yardas_run"], ganador_clima, peso))
+            desglose.append({
+                "categoria": "clima", "peso": peso,
+                "equipo_a": equipo_a, "valor_a": round(a["yardas_run"], 1), "score_a": "-", "puntos_a": round(pts_a, 2),
+                "equipo_b": equipo_b, "valor_b": round(b["yardas_run"], 1), "score_b": "-", "puntos_b": round(pts_b, 2),
+            })
 
     return {"puntaje": puntaje, "desglose": desglose}
 
@@ -691,8 +750,12 @@ def probabilidad_victoria(
 
 def imprimir_resultado(resultado: dict, equipo_a: str, equipo_b: str):
     print("\n=== DESGLOSE POR CATEGORÍA ===")
-    for cat, ea, va, eb, vb, ganador, peso in resultado["desglose"]:
-        print(f"{cat:35s} | {ea}: {va!s:>10} | {eb}: {vb!s:>10} | +{peso} → {ganador}")
+    for fila in resultado["desglose"]:
+        print(
+            f"{fila['categoria']:30s} | "
+            f"{fila['equipo_a']}: {fila['valor_a']!s:>10} (score {fila['score_a']}) → +{fila['puntos_a']:.2f} | "
+            f"{fila['equipo_b']}: {fila['valor_b']!s:>10} (score {fila['score_b']}) → +{fila['puntos_b']:.2f}"
+        )
 
     print("\n=== PUNTAJE TOTAL ===")
     total = resultado["puntaje"]

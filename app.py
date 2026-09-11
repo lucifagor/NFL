@@ -157,15 +157,22 @@ def mostrar_resultado(resultado, equipo_a, equipo_b, clima=None, local=None, com
 
         st.divider()
         st.subheader("Desglose por categoría")
+        st.caption(
+            "Calificación de 1 (peor de la liga) a 10 (mejor de la liga) en esa métrica. "
+            "Los puntos de cada categoría se reparten proporcional a esa calificación, "
+            "no todo-o-nada."
+        )
         filas = [
             {
-                "Categoría": cat,
-                nombre_equipo(equipo_a): va,
-                nombre_equipo(equipo_b): vb,
-                "Ventaja": nombre_equipo(ganador_cat) if ganador_cat in (equipo_a, equipo_b) else ganador_cat,
-                "Puntos": peso,
+                "Categoría": fila["categoria"],
+                f"{nombre_equipo(equipo_a)} — valor": fila["valor_a"],
+                f"{nombre_equipo(equipo_a)} — score": fila["score_a"],
+                f"{nombre_equipo(equipo_a)} — pts": fila["puntos_a"],
+                f"{nombre_equipo(equipo_b)} — valor": fila["valor_b"],
+                f"{nombre_equipo(equipo_b)} — score": fila["score_b"],
+                f"{nombre_equipo(equipo_b)} — pts": fila["puntos_b"],
             }
-            for cat, ea, va, eb, vb, ganador_cat, peso in resultado["desglose"]
+            for fila in resultado["desglose"]
         ]
         st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
 
