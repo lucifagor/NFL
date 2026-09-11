@@ -1,0 +1,5 @@
+setuptools<81
+streamlit
+nfl_data_py
+pandas
+requests
