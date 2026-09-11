@@ -124,9 +124,12 @@ def encabezado_equipo(abbr: str, tamano_col=None):
     st.markdown(f"**{nombre_equipo(abbr)}**")
 
 
-def mostrar_resultado(resultado, equipo_a, equipo_b, clima=None, local=None, compacto=False):
+def mostrar_resultado(resultado, equipo_a, equipo_b, clima=None, local=None, compacto=False,
+                       boton_detalle_key=None, contexto_detalle=None):
     """Renderiza el resultado de una comparación. compacto=True usa un
-    formato más chico, pensado para listas de varios partidos seguidos."""
+    formato más chico, pensado para listas de varios partidos seguidos.
+    Si boton_detalle_key se pasa (en modo compacto), agrega un botón que
+    lleva a una página aparte con el desglose completo de ese partido."""
     puntaje = resultado["puntaje"]
     ganador = max(puntaje, key=puntaje.get)
     max_posible = sum(WEIGHTS.values()) + HOME_FIELD_BONUS
@@ -144,6 +147,12 @@ def mostrar_resultado(resultado, equipo_a, equipo_b, clima=None, local=None, com
             st.image(logo_url(ganador), width=36)
             st.metric("Pronóstico", NOMBRES_EQUIPO.get(ganador, ganador), f"{prob[ganador]*100:.0f}% prob.")
         st.progress(prob[equipo_a], text=f"{nombre_equipo(equipo_a)}: {prob[equipo_a]*100:.0f}%  vs  {nombre_equipo(equipo_b)}: {prob[equipo_b]*100:.0f}%")
+
+        if boton_detalle_key and contexto_detalle:
+            if st.button("🔍 Ver detalle completo", key=boton_detalle_key, use_container_width=True):
+                st.session_state.detalle_partido = contexto_detalle
+                st.session_state.pagina = "detalle"
+                st.rerun()
     else:
         col_logo1, col_titulo, col_logo2 = st.columns([1, 4, 1])
         col_logo1.image(logo_url(equipo_a), width=64)
@@ -247,6 +256,41 @@ if st.session_state.pagina == "inicio":
 
 
 # ============================================================
+# PANTALLA: DETALLE DE UN PARTIDO (llegada desde el botón "Ver detalle
+# completo" en una lista de partidos)
+# ============================================================
+if st.session_state.pagina == "detalle":
+    ctx = st.session_state.get("detalle_partido")
+    if st.button("← Volver a pronósticos"):
+        st.session_state.pagina = "pronosticos"
+        st.rerun()
+
+    if not ctx:
+        st.warning("No hay ningún partido seleccionado.")
+        st.stop()
+
+    away, home, season, temp_hist = ctx["away"], ctx["home"], ctx["season"], ctx["temporadas_historicas"]
+    st.title(f"🔍 {nombre_equipo(away)} @ {nombre_equipo(home)}")
+
+    with st.spinner("Cargando detalle..."):
+        try:
+            stats = stats_cacheadas(season, temp_hist)
+        except Exception as e:
+            st.error(f"No se pudieron obtener las estadísticas: {e}")
+            st.stop()
+
+        if away not in stats["team"].values or home not in stats["team"].values:
+            st.error("Uno de los equipos no tiene datos para esta temporada todavía.")
+            st.stop()
+        avisar_temporadas_faltantes(stats)
+
+        resultado, clima = ejecutar_comparacion(stats, away, home, home, True, True)
+
+    mostrar_resultado(resultado, away, home, clima=clima, local=home, compacto=False)
+    st.stop()
+
+
+# ============================================================
 # PANTALLA: PRONÓSTICOS (lo que antes era la app completa)
 # ============================================================
 if st.button("← Volver a inicio"):
@@ -294,7 +338,7 @@ tab_individual, tab_proxima, tab_manual = st.tabs([
 # ============================================================
 with tab_individual:
     col_a, col_b = st.columns(2)
-    season_ind = col_a.number_input("Temporada", min_value=2015, max_value=2026, value=2025, key="season_ind")
+    season_ind = col_a.number_input("Temporada", min_value=2015, max_value=2027, value=datetime.date.today().year, key="season_ind")
     equipo_a = col_b.selectbox("Equipo A", EQUIPOS, index=EQUIPOS.index("KC"), format_func=nombre_equipo)
     equipo_b = st.selectbox("Equipo B", EQUIPOS, index=EQUIPOS.index("BUF"), format_func=nombre_equipo)
 
@@ -343,7 +387,7 @@ with tab_proxima:
         "ya jugados esta temporada."
     )
     season_auto = st.number_input(
-        "Temporada", min_value=2015, max_value=2026,
+        "Temporada", min_value=2015, max_value=2027,
         value=datetime.date.today().year, key="season_auto",
     )
     buscar_proxima = st.button("🔮 Pronosticar próxima semana", type="primary", use_container_width=True)
@@ -391,7 +435,14 @@ with tab_proxima:
                 col_logo_b.image(logo_url(home), width=40)
                 try:
                     resultado, _ = ejecutar_comparacion(stats, away, home, home, usar_clima, usar_odds)
-                    mostrar_resultado(resultado, away, home, compacto=True)
+                    mostrar_resultado(
+                        resultado, away, home, compacto=True,
+                        boton_detalle_key=f"detalle_auto_{away}_{home}_{season_auto}",
+                        contexto_detalle={
+                            "away": away, "home": home,
+                            "season": season_auto, "temporadas_historicas": temporadas_historicas,
+                        },
+                    )
                 except Exception as e:
                     st.error(f"No se pudo comparar este partido: {e}")
     else:
@@ -403,7 +454,7 @@ with tab_proxima:
 with tab_manual:
     st.write("Trae los partidos programados de una semana puntual (útil para revisar semanas pasadas).")
     col_a, col_b = st.columns(2)
-    season_sem = col_a.number_input("Temporada", min_value=2015, max_value=2026, value=2025, key="season_sem")
+    season_sem = col_a.number_input("Temporada", min_value=2015, max_value=2027, value=datetime.date.today().year, key="season_sem")
     week_sem = col_b.number_input("Semana", min_value=1, max_value=22, value=1, key="week_sem")
 
     cargar_semana = st.button("📅 Cargar y comparar semana", type="primary", use_container_width=True)
@@ -443,7 +494,14 @@ with tab_manual:
                 col_logo_b.image(logo_url(home), width=40)
                 try:
                     resultado, _ = ejecutar_comparacion(stats, away, home, home, usar_clima, usar_odds)
-                    mostrar_resultado(resultado, away, home, compacto=True)
+                    mostrar_resultado(
+                        resultado, away, home, compacto=True,
+                        boton_detalle_key=f"detalle_manual_{away}_{home}_{season_sem}_{week_sem}",
+                        contexto_detalle={
+                            "away": away, "home": home,
+                            "season": season_sem, "temporadas_historicas": temporadas_historicas,
+                        },
+                    )
                 except Exception as e:
                     st.error(f"No se pudo comparar este partido: {e}")
     else:
