@@ -277,23 +277,27 @@ _SECCIONES_NAV = [
 
 
 def logo_grande_centrado():
-    """Logo combinado (escudo + texto) en grande, centrado — va entre los
-    resultados de la semana y el menú de navegación."""
-    st.markdown(_sin_sangria(f"""
-    <div style="text-align:center; margin: 6px 0 10px 0;">
-        <img src="{LOGO_COMPLETO_URL}" style="max-width: 320px; width: 55%; height: auto;">
-    </div>
-    """), unsafe_allow_html=True)
+    """Ya no se usa por separado — el escudo ahora vive junto al menú en
+    barra_navegacion(). Se deja como no-op por si algo más la referencia."""
+    pass
 
 
 def barra_navegacion(activo: str):
-    """Menú horizontal centrado, sin logo (el logo grande va aparte,
-    arriba de este menú). La sección activa se muestra resaltada (botón
-    dorado); el resto, como botón discreto."""
-    col_izq, col_nav, col_der = st.columns([1, 3, 1])
-    with col_nav:
-        cols = st.columns(len(_SECCIONES_NAV))
-        for col, (clave, etiqueta) in zip(cols, _SECCIONES_NAV):
+    """Escudo (transparente, chico) a la izquierda; menú en cuadrícula
+    2x2 a la derecha. La sección activa se resalta en dorado."""
+    col_logo, col_menu = st.columns([1, 2.2])
+
+    with col_logo:
+        st.markdown(_sin_sangria(f"""
+        <div style="display:flex; align-items:center; justify-content:center; height:100%; padding:8px 0;">
+            <img src="{LOGO_ESCUDO_URL}" style="width:96px; height:auto;">
+        </div>
+        """), unsafe_allow_html=True)
+
+    with col_menu:
+        fila1 = st.columns(2)
+        fila2 = st.columns(2)
+        for col, (clave, etiqueta) in zip(fila1 + fila2, _SECCIONES_NAV):
             with col:
                 es_activo = clave == activo
                 if st.button(
