@@ -123,28 +123,16 @@ def inyectar_estilos():
     /* Sidebar con borde sutil */
     [data-testid="stSidebar"] { border-right: 1px solid #26402F; }
 
-    /* Banner de "campo cortado" con zonas de anotación en los bordes */
+    /* Banner ilustrado tipo estadio (graderías + campo + postes) */
     .franja-campo {
-        height: 64px;
-        display: flex;
         margin: -1rem -1rem 1rem -1rem;
         border-bottom: 2px solid #F2994A;
         position: relative;
         overflow: hidden;
-    }
-    .zona-anotacion {
-        width: 11%; min-width: 34px; background: #0F2015;
-        border-right: 3px solid #F1F4F9;
-    }
-    .zona-anotacion.derecha { border-right: none; border-left: 3px solid #F1F4F9; }
-    .zona-campo {
-        flex: 1;
-        background: repeating-linear-gradient(
-            -45deg, #1F6B3A, #1F6B3A 10px, #2A8449 10px, #2A8449 20px
-        );
+        line-height: 0;
     }
     .balon-animado {
-        position: absolute; left: 50%; top: 50%;
+        position: absolute; left: 50%; top: 62%;
         transform: translate(430%, -50%) rotate(25deg);
         animation: volar-balon 1.3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
         animation-delay: 0.25s;
@@ -179,14 +167,57 @@ def inyectar_estilos():
 
 
 def franja_campo():
-    """Banner decorativo tipo campo, con zonas de anotación en los bordes
-    y el balón (dibujado con SVG, sin logos) volando desde la derecha
-    hasta quedar al centro — animación de una sola vez al cargar."""
-    st.markdown(_sin_sangria("""
+    """Banner ilustrado tipo estadio: graderías arriba, campo en
+    perspectiva con líneas de yarda, postes de gol en los bordes, y el
+    escudo NFLWarriors al centro del campo — más el balón (SVG propio,
+    sin logos de terceros) volando desde la derecha hasta el centro."""
+    # Líneas de yarda con perspectiva (el campo es un trapecio: ancho
+    # abajo, angosto arriba, hacia el "horizonte" de las graderías).
+    lineas = ""
+    for i in range(1, 6):
+        f = i / 6
+        ancho = 900 - 600 * f
+        x_izq = 150 + 300 * f
+        y = 200 - 140 * f
+        grosor = max(1.0, 3 - f * 2)
+        lineas += (
+            f'<line x1="{x_izq:.0f}" y1="{y:.0f}" x2="{x_izq + ancho:.0f}" y2="{y:.0f}" '
+            f'stroke="#FFFFFF" stroke-width="{grosor:.1f}" opacity="0.85"/>'
+        )
+
+    asientos = "".join(
+        f'<rect x="{i * 60}" y="4" width="46" height="46" fill="{"#C0552F" if i % 2 == 0 else "#9C4127"}"/>'
+        for i in range(20)
+    )
+
+    st.markdown(_sin_sangria(f"""
     <div class="franja-campo">
-        <div class="zona-anotacion izquierda"></div>
-        <div class="zona-campo"></div>
-        <div class="zona-anotacion derecha"></div>
+        <svg viewBox="0 0 1200 200" width="100%" height="150" preserveAspectRatio="none" style="display:block;">
+            <defs>
+                <linearGradient id="gradaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#8A3A2A"/>
+                    <stop offset="100%" stop-color="#5C2A1E"/>
+                </linearGradient>
+                <linearGradient id="campoGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#1F6B3A"/>
+                    <stop offset="100%" stop-color="#2A8449"/>
+                </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="1200" height="55" fill="url(#gradaGrad)"/>
+            {asientos}
+            <rect x="0" y="52" width="1200" height="8" fill="#16261B"/>
+            <rect x="0" y="55" width="175" height="145" fill="#0F2015"/>
+            <rect x="1025" y="55" width="175" height="145" fill="#0F2015"/>
+            <polygon points="150,200 1050,200 750,60 450,60" fill="url(#campoGrad)"/>
+            {lineas}
+            <path d="M60 195 L60 150 M60 150 L40 110 M60 150 L80 110" stroke="#F2994A" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <path d="M1140 195 L1140 150 M1140 150 L1120 110 M1140 150 L1160 110" stroke="#F2994A" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <image href="{LOGO_TEXTO_URL}" x="15" y="107" width="130" height="43"
+                   transform="rotate(-90 80 128)"/>
+            <image href="{LOGO_TEXTO_URL}" x="1055" y="107" width="130" height="43"
+                   transform="rotate(90 1120 128)"/>
+            <image href="{LOGO_ESCUDO_URL}" x="562" y="138" width="76" height="76"/>
+        </svg>
         <svg class="balon-animado" width="60" height="36" viewBox="0 0 100 60">
             <defs>
                 <linearGradient id="cueroBalon" x1="10%" y1="10%" x2="90%" y2="90%">
@@ -266,16 +297,18 @@ def hero(titulo: str, subtitulo: str = ""):
     """), unsafe_allow_html=True)
 
 
+# Logo oficial de NFLWarriors — súbelos a tu repo de GitHub en una carpeta
+# "assets/" y ajusta esta ruta si tu usuario/repo son distintos.
+LOGO_ESCUDO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/escudo.png"
+LOGO_TEXTO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/wordmark.png"
+
+
 def _escudo_svg(tamano: int = 40) -> str:
-    """Escudo con 'W' — diseño geométrico original propio (no es el logo
-    de la NFL ni de ningún equipo), para que la marca sea de NFLWarriors
-    sin usar marcas registradas de terceros."""
-    return f"""<svg width="{tamano}" height="{int(tamano*1.1)}" viewBox="0 0 44 48" xmlns="http://www.w3.org/2000/svg">
-        <path d="M22 2 L42 9 L42 22 C42 34 33 43 22 46 C11 43 2 34 2 22 L2 9 Z"
-              fill="#1C3324" stroke="#F2994A" stroke-width="2.5"/>
-        <text x="22" y="33" font-family="'Barlow Condensed', sans-serif" font-weight="700"
-              font-size="24" fill="#F2994A" text-anchor="middle">W</text>
-    </svg>"""
+    """Logo oficial de NFLWarriors (imagen subida por el usuario) — ya no
+    es el escudo dibujado a mano, se conserva el nombre de la función
+    para no tocar cada punto donde se usa."""
+    alto = int(tamano * 1.1)
+    return f'<img src="{LOGO_ESCUDO_URL}" width="{tamano}" height="{alto}" style="object-fit:contain;">'
 
 
 def marca_completa():
