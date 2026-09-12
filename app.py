@@ -148,9 +148,54 @@ NOMBRES_EQUIPO = {
     "SF": "49ers", "TB": "Buccaneers", "TEN": "Titans", "WAS": "Commanders",
 }
 
+NOMBRES_COMPLETOS = {
+    "ARI": "Arizona Cardinals", "ATL": "Atlanta Falcons", "BAL": "Baltimore Ravens", "BUF": "Buffalo Bills",
+    "CAR": "Carolina Panthers", "CHI": "Chicago Bears", "CIN": "Cincinnati Bengals", "CLE": "Cleveland Browns",
+    "DAL": "Dallas Cowboys", "DEN": "Denver Broncos", "DET": "Detroit Lions", "GB": "Green Bay Packers",
+    "HOU": "Houston Texans", "IND": "Indianapolis Colts", "JAX": "Jacksonville Jaguars", "KC": "Kansas City Chiefs",
+    "LA": "Los Angeles Rams", "LAC": "Los Angeles Chargers", "LV": "Las Vegas Raiders", "MIA": "Miami Dolphins",
+    "MIN": "Minnesota Vikings", "NE": "New England Patriots", "NO": "New Orleans Saints", "NYG": "New York Giants",
+    "NYJ": "New York Jets", "PHI": "Philadelphia Eagles", "PIT": "Pittsburgh Steelers", "SEA": "Seattle Seahawks",
+    "SF": "San Francisco 49ers", "TB": "Tampa Bay Buccaneers", "TEN": "Tennessee Titans", "WAS": "Washington Commanders",
+}
+
 
 def nombre_equipo(abbr: str) -> str:
     return f"{NOMBRES_EQUIPO.get(abbr, abbr)} ({abbr})"
+
+
+def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color: str) -> str:
+    """Genera una tabla de una división al estilo gráfico de transmisión
+    deportiva: franja de color, logo, nombre completo, G-P-E-%."""
+    filas_html = ""
+    for _, row in filas.iterrows():
+        pct = row["% Victorias"] / 100
+        pct_txt = "-" if (row["V"] + row["D"] + row["E"]) == 0 else f"{pct:.3f}".lstrip("0")
+        filas_html += f"""
+        <tr style="border-bottom: 1px solid #1C2333;">
+            <td style="padding:6px 4px; width:30px;"><img src="{logo_url(row['Equipo'])}" width="22" style="vertical-align:middle;"></td>
+            <td style="padding:6px 8px; font-weight:600; color:#F1F4F9;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
+            <td style="text-align:center; color:#C7CEDA;">{row['V']}</td>
+            <td style="text-align:center; color:#C7CEDA;">{row['D']}</td>
+            <td style="text-align:center; color:#C7CEDA;">{row['E']}</td>
+            <td style="text-align:center; color:#C7CEDA; font-weight:600;">{pct_txt}</td>
+        </tr>"""
+
+    return f"""
+    <table style="width:100%; border-collapse:collapse; margin-bottom:16px;
+                   font-family:'Inter',sans-serif; background:#141B2B;
+                   border-radius:8px; overflow:hidden; border:1px solid #1C2333;">
+        <tr style="background:{color};">
+            <td colspan="2" style="padding:8px 8px; color:white; font-weight:700;
+                font-family:'Barlow Condensed',sans-serif; font-size:1.05rem;">{nombre_division}</td>
+            <td style="text-align:center; color:white; font-weight:600; width:26px; font-size:0.8rem;">G</td>
+            <td style="text-align:center; color:white; font-weight:600; width:26px; font-size:0.8rem;">P</td>
+            <td style="text-align:center; color:white; font-weight:600; width:26px; font-size:0.8rem;">E</td>
+            <td style="text-align:center; color:white; font-weight:600; width:44px; font-size:0.8rem;">PCT</td>
+        </tr>
+        {filas_html}
+    </table>
+    """
 
 
 def avisar_temporadas_faltantes(stats: pd.DataFrame):
@@ -404,43 +449,32 @@ if st.session_state.pagina == "estadisticas":
             if standings.empty:
                 st.info("No se pudo cargar la tabla de posiciones.")
             else:
-                standings = standings.copy()
-                standings["Logo"] = standings["Equipo"].map(logo_url)
-                standings["Equipo"] = standings["Equipo"].map(lambda a: NOMBRES_EQUIPO.get(a, a))
-
                 if API_SPORTS_KEY and "PF" in standings.columns:
                     st.caption("📡 Datos oficiales en tiempo real vía API-Sports")
 
-                columnas_orden = ["Logo", "Equipo", "V", "D", "E"]
-                config_columnas = {
-                    "Logo": st.column_config.ImageColumn("", width="small"),
-                    "Equipo": st.column_config.TextColumn("Equipo", width="medium"),
-                    "V": st.column_config.NumberColumn("V", width="small"),
-                    "D": st.column_config.NumberColumn("D", width="small"),
-                    "E": st.column_config.NumberColumn("E", width="small"),
-                }
-                if "PF" in standings.columns:
-                    columnas_orden += ["PF", "PC"]
-                    config_columnas["PF"] = st.column_config.NumberColumn("PF", width="small", help="Puntos a favor")
-                    config_columnas["PC"] = st.column_config.NumberColumn("PC", width="small", help="Puntos en contra")
-                if "Racha" in standings.columns:
-                    columnas_orden.append("Racha")
-                    config_columnas["Racha"] = st.column_config.TextColumn("Racha", width="small")
-                columnas_orden.append("% Victorias")
-                config_columnas["% Victorias"] = st.column_config.ProgressColumn(
-                    "% Victorias", min_value=0, max_value=100, format="%.0f%%",
-                )
+                col_afc, col_nfc = st.columns(2)
 
-                for conf in sorted(standings["Conferencia"].unique()):
-                    st.subheader(conf)
-                    conf_df = standings[standings["Conferencia"] == conf]
-                    for div in sorted(conf_df["División"].unique()):
-                        st.markdown(f"**{div}**")
-                        st.dataframe(
-                            conf_df[conf_df["División"] == div][columnas_orden],
-                            use_container_width=True, hide_index=True,
-                            column_config=config_columnas,
-                        )
+                st.markdown("""
+                <style>
+                .banda-conf { padding: 10px; border-radius: 6px; text-align: center;
+                    font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+                    font-size: 1.3rem; color: white; margin-bottom: 8px; }
+                </style>
+                """, unsafe_allow_html=True)
+
+                with col_afc:
+                    st.markdown('<div class="banda-conf" style="background:#C8102E;">AFC</div>', unsafe_allow_html=True)
+                    afc_df = standings[standings["Conferencia"] == "AFC"]
+                    for div in sorted(afc_df["División"].unique()):
+                        filas = afc_df[afc_df["División"] == div].sort_values("% Victorias", ascending=False)
+                        st.markdown(tabla_division_html(div, filas, "#C8102E"), unsafe_allow_html=True)
+
+                with col_nfc:
+                    st.markdown('<div class="banda-conf" style="background:#013369;">NFC</div>', unsafe_allow_html=True)
+                    nfc_df = standings[standings["Conferencia"] == "NFC"]
+                    for div in sorted(nfc_df["División"].unique()):
+                        filas = nfc_df[nfc_df["División"] == div].sort_values("% Victorias", ascending=False)
+                        st.markdown(tabla_division_html(div, filas, "#013369"), unsafe_allow_html=True)
         except Exception as e:
             st.error(f"No se pudo cargar la tabla de posiciones: {e}")
 
