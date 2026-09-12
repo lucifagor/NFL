@@ -893,6 +893,78 @@ def obtener_standings(season: int) -> pd.DataFrame:
     return df
 
 
+def obtener_calendario_equipo(team_abbr: str, season: int) -> pd.DataFrame:
+    """
+    Calendario completo de un equipo en la temporada — todos sus
+    partidos (jugados y por jugar), rival, si es local/visitante, y
+    marcador cuando ya se jugó. Usa nfl_data_py (mismo dato confiable
+    que ya usamos para standings/próximos partidos).
+    """
+    if not NFL_DATA_PY_OK:
+        raise RuntimeError("nfl_data_py no disponible")
+
+    sched = nfl.import_schedules([season])
+    if sched is None or sched.empty:
+        raise ValueError(f"No hay calendario disponible todavía para la temporada {season}.")
+
+    del_equipo = sched[(sched["home_team"] == team_abbr) | (sched["away_team"] == team_abbr)].copy()
+    if del_equipo.empty:
+        raise ValueError(f"No se encontraron partidos de {team_abbr} en la temporada {season}.")
+
+    filas = []
+    for _, p in del_equipo.sort_values("week").iterrows():
+        es_local = p["home_team"] == team_abbr
+        rival = p["away_team"] if es_local else p["home_team"]
+        propio_score = p["home_score"] if es_local else p["away_score"]
+        rival_score = p["away_score"] if es_local else p["home_score"]
+        jugado = pd.notna(propio_score) and pd.notna(rival_score)
+
+        resultado = "-"
+        if jugado:
+            if propio_score > rival_score:
+                resultado = f"W {int(propio_score)}-{int(rival_score)}"
+            elif propio_score < rival_score:
+                resultado = f"L {int(propio_score)}-{int(rival_score)}"
+            else:
+                resultado = f"E {int(propio_score)}-{int(rival_score)}"
+
+        filas.append({
+            "Semana": p.get("week", "?"),
+            "Rival": rival,
+            "Sede": "vs" if es_local else "@",
+            "Fecha": p.get("gameday", ""),
+            "Resultado": resultado,
+        })
+
+    return pd.DataFrame(filas)
+
+
+def obtener_roster_equipo(team_abbr: str, season: int) -> pd.DataFrame:
+    """
+    Plantilla de un equipo para la temporada — nombre, posición y
+    número, usando el roster de nfl_data_py.
+    """
+    if not NFL_DATA_PY_OK:
+        raise RuntimeError("nfl_data_py no disponible")
+
+    roster = nfl.import_seasonal_rosters([season])
+    if roster is None or roster.empty:
+        raise ValueError(f"No hay roster disponible todavía para la temporada {season}.")
+
+    del_equipo = roster[roster["team"] == team_abbr]
+    if del_equipo.empty:
+        raise ValueError(f"No se encontró roster de {team_abbr} para la temporada {season}.")
+
+    columnas_deseadas = ["player_name", "position", "jersey_number"]
+    columnas_disponibles = [c for c in columnas_deseadas if c in del_equipo.columns]
+    resultado = del_equipo[columnas_disponibles].drop_duplicates().rename(columns={
+        "player_name": "Jugador", "position": "Posición", "jersey_number": "Número",
+    })
+    if "Posición" in resultado.columns:
+        resultado = resultado.sort_values("Posición")
+    return resultado.reset_index(drop=True)
+
+
 def obtener_lideres_estadisticos(season: int, top_n: int = 5) -> dict:
     """
     Devuelve los líderes de la temporada en yardas de pase, carrera y

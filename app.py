@@ -38,6 +38,8 @@ from comparador_nfl import (
     obtener_standings,
     obtener_standings_api_sports,
     obtener_marcadores_actuales,
+    obtener_calendario_equipo,
+    obtener_roster_equipo,
     obtener_marcadores_api_sports,
     logo_url,
     favorito_segun_mercado,
@@ -474,6 +476,35 @@ def noticias_equipo_cacheadas(team_abbr: str, limite: int = 10):
     return obtener_noticias_equipo(team_abbr, limite)
 
 
+@st.cache_data(show_spinner=False, ttl=1800)
+def calendario_equipo_cacheado(team_abbr: str, season: int):
+    return obtener_calendario_equipo(team_abbr, season)
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def roster_equipo_cacheado(team_abbr: str, season: int):
+    return obtener_roster_equipo(team_abbr, season)
+
+
+def lista_equipos_sidebar():
+    """Lista de los 32 equipos (nombre + abreviatura) como botones — clic
+    en cualquiera lleva al detalle de ese equipo (calendario, roster,
+    standing)."""
+    st.markdown(_sin_sangria("""
+    <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
+       font-size:1.1rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 8px 0;
+       border-bottom:2px solid #BD4E1E; display:inline-block; padding-bottom:4px;">EQUIPOS</p>
+    """), unsafe_allow_html=True)
+    for abbr in EQUIPOS:
+        if st.button(
+            f"{NOMBRES_EQUIPO.get(abbr, abbr)} ({abbr})",
+            key=f"lista_equipo_{abbr}", use_container_width=True,
+        ):
+            st.session_state.equipo_detalle = abbr
+            st.session_state.pagina = "equipo_detalle"
+            st.rerun()
+
+
 def renderizar_noticias(noticias: list):
     """Grilla de 2 columnas: foto (clicable, tamaño parejo) arriba, nota
     abajo — usado tanto en Noticias generales como por equipo."""
@@ -680,10 +711,15 @@ if st.session_state.pagina == "inicio":
     with st.spinner("Cargando noticias..."):
         noticias = noticias_cacheadas(20)
 
+    st.caption(f"🔧 Diagnóstico temporal: ESPN devolvió {len(noticias)} noticias.")
+
     principales = noticias[:6] if not (noticias and "error" in noticias[0]) else noticias
     pasadas = noticias[6:20] if not (noticias and "error" in noticias[0]) else []
 
-    col_principal, col_lista = st.columns([2, 1])
+    col_equipos, col_principal, col_lista = st.columns([1, 2, 1])
+
+    with col_equipos:
+        lista_equipos_sidebar()
 
     with col_principal:
         renderizar_noticias(principales)
@@ -710,6 +746,53 @@ if st.session_state.pagina == "inicio":
 
     st.stop()
 
+
+# ============================================================
+# PANTALLA: DETALLE DE EQUIPO — calendario, roster y standing
+# ============================================================
+if st.session_state.pagina == "equipo_detalle":
+    encabezado_sitio("inicio")
+    equipo_sel = st.session_state.get("equipo_detalle", "KC")
+    season_equipo = datetime.date.today().year
+
+    if st.button("← Volver a Noticias"):
+        st.session_state.pagina = "inicio"
+        st.rerun()
+
+    hero(
+        f'<span style="color:#F1F4F9;">{NOMBRES_EQUIPO.get(equipo_sel, equipo_sel)}</span> '
+        f'<span style="color:#BD4E1E;">({equipo_sel})</span>',
+    )
+    st.image(logo_url(equipo_sel), width=90)
+
+    st.subheader("Standing")
+    try:
+        standings_eq = standings_cacheados(season_equipo, api_key=API_SPORTS_KEY)
+        fila_eq = standings_eq[standings_eq["Equipo"] == equipo_sel]
+        if fila_eq.empty:
+            st.info("No se encontró el standing de este equipo todavía.")
+        else:
+            st.dataframe(fila_eq, use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.info(f"No se pudo cargar el standing: {e}")
+
+    st.divider()
+    st.subheader("Calendario de la temporada")
+    try:
+        calendario_eq = calendario_equipo_cacheado(equipo_sel, season_equipo)
+        st.dataframe(calendario_eq, use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.info(f"No se pudo cargar el calendario: {e}")
+
+    st.divider()
+    st.subheader("Roster")
+    try:
+        roster_eq = roster_equipo_cacheado(equipo_sel, season_equipo)
+        st.dataframe(roster_eq, use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.info(f"No se pudo cargar el roster: {e}")
+
+    st.stop()
 
 
 # ============================================================
