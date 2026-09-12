@@ -167,11 +167,13 @@ def inyectar_estilos():
 
 
 def franja_campo():
-    """Banner del estadio — una sola imagen (subida por el usuario), en
-    vez de la ilustración construida con SVG."""
+    """Banner del estadio (imagen subida por el usuario) con el wordmark
+    NFL WARRIORS sobrepuesto en grande, arriba."""
     st.markdown(_sin_sangria(f"""
-    <div class="franja-campo">
+    <div class="franja-campo" style="position:relative;">
         <img src="{BANNER_URL}" style="width:100%; height:auto; display:block;">
+        <img src="{LOGO_TEXTO_URL}" style="position:absolute; top:6%; left:50%;
+             transform:translateX(-50%); height:22%; width:auto; max-width:70%;">
     </div>
     """), unsafe_allow_html=True)
 
@@ -285,6 +287,7 @@ def marca_compacta():
 _SECCIONES_NAV = [
     ("inicio", "Noticias"),
     ("estadisticas", "Standings"),
+    ("lesiones", "Lesiones"),
     ("pronosticos", "Pronósticos"),
     ("fantasy", "Fantasy"),
 ]
@@ -297,9 +300,8 @@ def logo_grande_centrado():
 
 
 def barra_navegacion(activo: str):
-    """Logo (escudo + texto) centrado arriba; abajo, un casco a cada lado
-    del menú, que va en una sola línea entre ambos. La sección activa se
-    resalta en dorado."""
+    """Logo (escudo + texto) centrado arriba; menú en una sola línea
+    debajo, centrado. La sección activa se resalta en dorado."""
     st.markdown(_sin_sangria(f"""
     <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:12px;">
         <img src="{LOGO_ESCUDO_URL}" style="width:70px; height:auto;">
@@ -308,13 +310,6 @@ def barra_navegacion(activo: str):
     """), unsafe_allow_html=True)
 
     col_izq, col_menu, col_der = st.columns([1, 6, 1])
-
-    with col_izq:
-        st.markdown(_sin_sangria(f"""
-        <div style="display:flex; align-items:center; justify-content:center; height:100%;">
-            <img src="{LOGO_ESCUDO_URL}" style="width:56px; height:auto;">
-        </div>
-        """), unsafe_allow_html=True)
 
     with col_menu:
         cols = st.columns(len(_SECCIONES_NAV))
@@ -328,13 +323,6 @@ def barra_navegacion(activo: str):
                 ) and not es_activo:
                     st.session_state.pagina = clave
                     st.rerun()
-
-    with col_der:
-        st.markdown(_sin_sangria(f"""
-        <div style="display:flex; align-items:center; justify-content:center; height:100%;">
-            <img src="{LOGO_ESCUDO_URL}" style="width:56px; height:auto;">
-        </div>
-        """), unsafe_allow_html=True)
 
     st.markdown('<hr style="border-color:#26402F; margin-top:0;">', unsafe_allow_html=True)
 
@@ -666,8 +654,20 @@ if st.session_state.pagina == "inicio":
                     if n.get("link"):
                         st.markdown(f"[Leer más]({n['link']})")
 
+    st.stop()
+
+
+# ============================================================
+# PANTALLA: LESIONES — reporte de lesiones de toda la liga
+# ============================================================
+if st.session_state.pagina == "lesiones":
+    encabezado_sitio("lesiones")
+    hero(
+        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#F2994A;">Injuries</span>',
+        "Reporte de lesiones recientes de toda la liga.",
+    )
+
     st.divider()
-    st.subheader("🤕 Lesiones recientes (toda la liga)")
     with st.spinner("Cargando lesiones..."):
         lesiones = lesiones_liga_cacheadas(season=datetime.date.today().year, api_key=API_SPORTS_KEY)
 
