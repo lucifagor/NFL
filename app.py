@@ -221,9 +221,9 @@ def marca_completa():
 
 
 def marca_compacta():
-    """Barra de marca angosta — logo + wordmark, sin tagline. Se usa en el
-    resto de las pantallas para mantener la identidad consistente sin
-    repetir el lockup completo en cada una."""
+    """Barra de marca angosta — logo + wordmark, sin tagline. Se usa en
+    pantallas secundarias (como el detalle de un partido) que no forman
+    parte del menú principal."""
     st.markdown(_sin_sangria(f"""
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;
                 padding-bottom:12px; border-bottom:1px solid #223255;">
@@ -233,6 +233,51 @@ def marca_compacta():
         </div>
     </div>
     """), unsafe_allow_html=True)
+
+
+_SECCIONES_NAV = [
+    ("inicio", "Noticias"),
+    ("estadisticas", "Standings"),
+    ("pronosticos", "Pronósticos"),
+    ("fantasy", "Fantasy"),
+]
+
+
+def barra_navegacion(activo: str):
+    """Menú horizontal tipo NFL.com — logo a la izquierda, secciones a la
+    derecha. La sección activa se muestra resaltada (botón dorado); el
+    resto, como link discreto."""
+    st.markdown(_sin_sangria("""
+    <style>
+    .nav-marca { display:flex; align-items:center; gap:10px; height:100%; }
+    </style>
+    """), unsafe_allow_html=True)
+
+    col_marca, col_nav = st.columns([2, 5])
+    with col_marca:
+        st.markdown(_sin_sangria(f"""
+        <div class="nav-marca">
+            {_escudo_svg(30)}
+            <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.25rem;">
+                <span style="color:#F1F4F9;">NFL</span> <span style="color:#FFB627;">WARRIORS</span>
+            </div>
+        </div>
+        """), unsafe_allow_html=True)
+
+    with col_nav:
+        cols = st.columns(len(_SECCIONES_NAV))
+        for col, (clave, etiqueta) in zip(cols, _SECCIONES_NAV):
+            with col:
+                es_activo = clave == activo
+                if st.button(
+                    etiqueta, key=f"nav_{clave}",
+                    type="primary" if es_activo else "secondary",
+                    use_container_width=True,
+                ) and not es_activo:
+                    st.session_state.pagina = clave
+                    st.rerun()
+
+    st.markdown('<hr style="border-color:#223255; margin-top:0;">', unsafe_allow_html=True)
 
 
 inyectar_estilos()
@@ -513,6 +558,7 @@ if not NFL_DATA_PY_OK:
 # ============================================================
 if st.session_state.pagina == "inicio":
     franja_campo()
+    barra_navegacion("inicio")
     marca_completa()
 
     with st.spinner("Cargando marcadores..."):
@@ -521,14 +567,6 @@ if st.session_state.pagina == "inicio":
 
     st.divider()
     hero("Noticias", "Lo último de la liga, antes de ver los pronósticos.")
-
-    if st.button("🔮 Ver pronósticos", type="primary", use_container_width=True):
-        st.session_state.pagina = "pronosticos"
-        st.rerun()
-
-    if st.button("📊 Estadísticas (tabla de posiciones)", use_container_width=True):
-        st.session_state.pagina = "estadisticas"
-        st.rerun()
 
     st.divider()
     st.subheader("📰 Noticias recientes")
@@ -578,11 +616,7 @@ if st.session_state.pagina == "inicio":
 # PANTALLA: ESTADÍSTICAS — tabla de posiciones de la liga
 # ============================================================
 if st.session_state.pagina == "estadisticas":
-    if st.button("← Volver a inicio"):
-        st.session_state.pagina = "inicio"
-        st.rerun()
-
-    marca_compacta()
+    barra_navegacion("estadisticas")
     hero("Tabla de posiciones")
     season_standings = st.number_input(
         "Temporada", min_value=2015, max_value=2027,
@@ -678,13 +712,23 @@ if st.session_state.pagina == "detalle":
 
 
 # ============================================================
+# PANTALLA: FANTASY (en construcción)
+# ============================================================
+if st.session_state.pagina == "fantasy":
+    barra_navegacion("fantasy")
+    hero("Fantasy", "Próximamente.")
+    st.info(
+        "Todavía no hay nada armado aquí — dime qué te gustaría ver "
+        "(ligas, draft, waiver wire, proyecciones semanales, tu roster, etc.) "
+        "y lo construimos."
+    )
+    st.stop()
+
+
+# ============================================================
 # PANTALLA: PRONÓSTICOS (lo que antes era la app completa)
 # ============================================================
-if st.button("← Volver a inicio"):
-    st.session_state.pagina = "inicio"
-    st.rerun()
-
-marca_compacta()
+barra_navegacion("pronosticos")
 hero("Comparador de equipos", "Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.")
 
 # --- Barra lateral: pesos del modelo (compartidos por las tres pestañas) ---
