@@ -139,15 +139,15 @@ def inyectar_estilos():
         margin-bottom: 12px; scrollbar-width: thin;
     }
     .ticker-juego {
-        flex: 0 0 auto; background: #1C3324; border: 1px solid #26402F;
+        flex: 0 0 auto; background: #E9EBE8; border: 1px solid #D2D6D0;
         border-radius: 6px; padding: 8px 14px; min-width: 170px; max-width: 210px;
     }
     .ticker-equipo { display:flex; align-items:center; justify-content:space-between; gap:8px; }
     .ticker-equipo img { width:20px; height:20px; }
-    .ticker-abbr { font-weight:700; font-size:0.85rem; color:#F1F4F9; }
-    .ticker-score { font-weight:700; font-size:0.85rem; color:#F2994A; }
-    .ticker-estado { font-size:0.7rem; color:#F1F4F9; text-align:center; margin-top:4px; line-height:1.3; white-space:normal; }
-    .ticker-estadio { font-size:0.65rem; color:#9CB3A3; text-align:center; margin-top:1px; line-height:1.3; white-space:normal; }
+    .ticker-abbr { font-weight:700; font-size:0.85rem; color:#14241A; }
+    .ticker-score { font-weight:700; font-size:0.85rem; color:#C97A2E; }
+    .ticker-estado { font-size:0.7rem; color:#1F241E; text-align:center; margin-top:4px; line-height:1.3; white-space:normal; }
+    .ticker-estadio { font-size:0.65rem; color:#5B6B60; text-align:center; margin-top:1px; line-height:1.3; white-space:normal; }
     </style>
     """), unsafe_allow_html=True)
 
