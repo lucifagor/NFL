@@ -508,20 +508,9 @@ def renderizar_noticias(noticias: list):
 
 
 def grid_iconos_equipos():
-    """Iconos pequeños de los 32 equipos — clic en cualquiera lleva a
-    noticias específicas de ese equipo."""
-    st.caption("Noticias por equipo")
-    por_fila = 8
-    for i in range(0, len(EQUIPOS), por_fila):
-        fila = EQUIPOS[i:i + por_fila]
-        cols = st.columns(por_fila)
-        for col, abbr in zip(cols, fila):
-            with col:
-                st.image(logo_url(abbr), width=28)
-                if st.button(abbr, key=f"nav_noticias_{abbr}", use_container_width=True):
-                    st.session_state.equipo_noticias = abbr
-                    st.session_state.pagina = "noticias_equipo"
-                    st.rerun()
+    """Ya no se usa — se quitó la idea de noticias por equipo (el
+    endpoint de ESPN por equipo no traía resultados)."""
+    pass
 
 
 @st.cache_data(show_spinner=False, ttl=900)
@@ -688,37 +677,39 @@ if st.session_state.pagina == "inicio":
         '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#F2994A;">News</span>',
     )
 
-    grid_iconos_equipos()
-    st.divider()
-
     with st.spinner("Cargando noticias..."):
-        noticias = noticias_cacheadas()
-    renderizar_noticias(noticias)
+        noticias = noticias_cacheadas(20)
+
+    principales = noticias[:6] if not (noticias and "error" in noticias[0]) else noticias
+    pasadas = noticias[6:20] if not (noticias and "error" in noticias[0]) else []
+
+    col_principal, col_lista = st.columns([2, 1])
+
+    with col_principal:
+        renderizar_noticias(principales)
+
+    with col_lista:
+        filas_html = ""
+        for n in pasadas:
+            link = n.get("link", "")
+            titulo_html = f'<a href="{link}" style="color:#F1F4F9; text-decoration:none;">{n["titulo"]}</a>' if link else n["titulo"]
+            filas_html += f"""
+            <div style="padding:10px 0; border-bottom:1px solid #1C3324; display:flex; align-items:flex-start; gap:8px;">
+                <span style="color:#F2994A; font-size:0.9rem; line-height:1.4;">📄</span>
+                <span style="font-size:0.88rem; line-height:1.4;">{titulo_html}</span>
+            </div>"""
+
+        st.markdown(_sin_sangria(f"""
+        <div style="background:#152018; border:1px solid #26402F; border-radius:8px; padding:14px 16px;">
+            <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
+               font-size:1.1rem; color:#F2994A; letter-spacing:0.03em; margin:0 0 8px 0;
+               border-bottom:2px solid #F2994A; display:inline-block; padding-bottom:4px;">NOTICIAS</p>
+            {filas_html}
+        </div>
+        """), unsafe_allow_html=True)
 
     st.stop()
 
-
-# ============================================================
-# PANTALLA: NOTICIAS POR EQUIPO (sub-pantalla de Noticias)
-# ============================================================
-if st.session_state.pagina == "noticias_equipo":
-    encabezado_sitio("inicio")
-    equipo_sel = st.session_state.get("equipo_noticias", "KC")
-
-    if st.button("← Volver a Noticias"):
-        st.session_state.pagina = "inicio"
-        st.rerun()
-
-    hero(
-        f'<span style="color:#F1F4F9;">{NOMBRES_EQUIPO.get(equipo_sel, equipo_sel)}</span> '
-        f'<span style="color:#F2994A;">News</span>',
-    )
-
-    with st.spinner("Cargando noticias..."):
-        noticias_eq = noticias_equipo_cacheadas(equipo_sel)
-    renderizar_noticias(noticias_eq)
-
-    st.stop()
 
 
 # ============================================================
