@@ -146,7 +146,8 @@ def inyectar_estilos():
     .ticker-equipo img { width:20px; height:20px; }
     .ticker-abbr { font-weight:700; font-size:0.85rem; color:#F1F4F9; }
     .ticker-score { font-weight:700; font-size:0.85rem; color:#F2994A; }
-    .ticker-estado { font-size:0.68rem; color:#9CB3A3; text-align:center; margin-top:4px; line-height:1.3; white-space:normal; }
+    .ticker-estado { font-size:0.7rem; color:#F1F4F9; text-align:center; margin-top:4px; line-height:1.3; white-space:normal; }
+    .ticker-estadio { font-size:0.65rem; color:#9CB3A3; text-align:center; margin-top:1px; line-height:1.3; white-space:normal; }
     </style>
     """), unsafe_allow_html=True)
 
@@ -177,16 +178,12 @@ def ticker_marcadores(partidos: list):
         away_score = p["away_score"] if p["away_score"] is not None else "-"
         home_score = p["home_score"] if p["home_score"] is not None else "-"
         if p["estado"] in ("FT", "AOT"):
-            estado_txt = "Final" if p["estado"] == "FT" else "Final (OT)"
+            linea1 = "Final" if p["estado"] == "FT" else "Final (OT)"
+            linea2 = ""
         else:
-            partes = []
-            if p.get("fecha"):
-                partes.append(_fecha_corta(p["fecha"]))
-            if p.get("hora"):
-                partes.append(p["hora"])
-            if p.get("estadio"):
-                partes.append(p["estadio"])
-            estado_txt = " · ".join(partes) if partes else "Por confirmar"
+            fecha_hora = " · ".join(x for x in [_fecha_corta(p["fecha"]) if p.get("fecha") else "", p.get("hora", "")] if x)
+            linea1 = fecha_hora or "Por confirmar"
+            linea2 = p.get("estadio", "")
         tarjetas += f"""
         <div class="ticker-juego">
             <div class="ticker-equipo">
@@ -197,7 +194,8 @@ def ticker_marcadores(partidos: list):
                 <img src="{logo_url(p['home_abbr'])}"><span class="ticker-abbr">{p['home_abbr']}</span>
                 <span class="ticker-score">{home_score}</span>
             </div>
-            <div class="ticker-estado">{estado_txt}</div>
+            <div class="ticker-estado">{linea1}</div>
+            {f'<div class="ticker-estadio">{linea2}</div>' if linea2 else ''}
         </div>"""
     st.markdown(_sin_sangria(f'<div class="ticker-marcadores">{tarjetas}</div>'), unsafe_allow_html=True)
 
