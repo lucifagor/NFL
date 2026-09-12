@@ -159,7 +159,7 @@ def inyectar_estilos():
     .ticker-equipo { display:flex; align-items:center; justify-content:flex-start; gap:6px; }
     .ticker-equipo img { width:20px; height:20px; }
     .ticker-abbr { font-weight:700; font-size:0.85rem; color:#14241A; margin-right:auto; }
-    .ticker-score { font-weight:700; font-size:0.85rem; color:#C97A2E; }
+    .ticker-score { font-weight:700; font-size:0.85rem; color:#000000; }
     .ticker-estado { font-size:0.7rem; color:#1F241E; text-align:center; line-height:1.3; white-space:normal; }
     .ticker-estadio { font-size:0.65rem; color:#3E4A42; font-weight:600; text-align:center; margin-top:1px; line-height:1.3; white-space:normal; }
     </style>
@@ -172,8 +172,8 @@ def franja_campo():
     st.markdown(_sin_sangria(f"""
     <div class="franja-campo" style="position:relative;">
         <img src="{BANNER_URL}" style="width:100%; height:auto; display:block;">
-        <img src="{LOGO_TEXTO_URL}" style="position:absolute; top:6%; left:50%;
-             transform:translateX(-50%); height:22%; width:auto; max-width:70%;">
+        <img src="{LOGO_TEXTO_URL}" style="position:absolute; top:2%; left:50%;
+             transform:translateX(-50%); height:44%; width:auto; max-width:85%;">
     </div>
     """), unsafe_allow_html=True)
 
@@ -190,14 +190,22 @@ def _fecha_corta(fecha_iso: str) -> str:
         return fecha_iso
 
 
-def ticker_marcadores(partidos: list):
-    """Renderiza el ticker horizontal de marcadores estilo NFL.com."""
+def ticker_marcadores(partidos: list, standings: pd.DataFrame = None):
+    """Renderiza el ticker horizontal de marcadores estilo NFL.com.
+    Si el partido no se ha jugado, en vez de '-' muestra el récord
+    ganados-perdidos de cada equipo en la temporada (ej. 3-4)."""
     if not partidos:
         return
+
+    registros = {}
+    if standings is not None and not standings.empty:
+        for _, fila in standings.iterrows():
+            registros[fila["Equipo"]] = f"{int(fila['V'])}-{int(fila['D'])}"
+
     tarjetas = ""
     for p in partidos:
-        away_score = p["away_score"] if p["away_score"] is not None else "-"
-        home_score = p["home_score"] if p["home_score"] is not None else "-"
+        away_score = p["away_score"] if p["away_score"] is not None else registros.get(p["away_abbr"], "-")
+        home_score = p["home_score"] if p["home_score"] is not None else registros.get(p["home_abbr"], "-")
         if p["estado"] in ("FT", "AOT"):
             linea1 = "Final" if p["estado"] == "FT" else "Final (OT)"
             linea2 = ""
@@ -300,15 +308,9 @@ def logo_grande_centrado():
 
 
 def barra_navegacion(activo: str):
-    """Logo (escudo + texto) centrado arriba; menú en una sola línea
-    debajo, centrado. La sección activa se resalta en dorado."""
-    st.markdown(_sin_sangria(f"""
-    <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:12px;">
-        <img src="{LOGO_ESCUDO_URL}" style="width:70px; height:auto;">
-        <img src="{LOGO_TEXTO_URL}" style="height:60px; width:auto;">
-    </div>
-    """), unsafe_allow_html=True)
-
+    """Menú en una sola línea, centrado. La sección activa se resalta en
+    dorado. (El logo ya va en grande sobre el banner del estadio, no se
+    repite aquí)."""
     col_izq, col_menu, col_der = st.columns([1, 6, 1])
 
     with col_menu:
@@ -334,7 +336,11 @@ def encabezado_sitio(activo: str):
     franja_campo()
     with st.spinner("Cargando marcadores..."):
         partidos_ticker = marcadores_cacheados(datetime.date.today().year, api_key=API_SPORTS_KEY)
-    ticker_marcadores(partidos_ticker)
+        try:
+            standings_ticker = standings_cacheados(datetime.date.today().year, api_key=API_SPORTS_KEY)
+        except Exception:
+            standings_ticker = None
+    ticker_marcadores(partidos_ticker, standings_ticker)
     logo_grande_centrado()
     barra_navegacion(activo)
 
@@ -621,15 +627,8 @@ if st.session_state.pagina == "inicio":
     st.divider()
     hero(
         '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#F2994A;">News</span>',
-        "Lo último de la liga, antes de ver los pronósticos.",
     )
 
-    st.divider()
-    st.markdown(
-        '<h3><span style="color:#F1F4F9;">📰 NFL Warriors</span> '
-        '<span style="color:#F2994A;">News</span></h3>',
-        unsafe_allow_html=True,
-    )
     with st.spinner("Cargando noticias..."):
         noticias = noticias_cacheadas()
 
@@ -638,21 +637,22 @@ if st.session_state.pagina == "inicio":
     elif not noticias:
         st.info("No hay noticias disponibles en este momento.")
     else:
-        for n in noticias:
-            with st.container(border=True):
-                if n.get("imagen"):
-                    col_img, col_txt = st.columns([1, 2])
-                    col_img.image(n["imagen"], use_container_width=True)
-                    with col_txt:
+        # Dos columnas: foto arriba (30% más chica) y texto de la nota abajo.
+        for i in range(0, len(noticias), 2):
+            par = noticias[i:i + 2]
+            cols = st.columns(2)
+            for col, n in zip(cols, par):
+                with col:
+                    with st.container(border=True):
+                        if n.get("imagen"):
+                            st.markdown(_sin_sangria(f"""
+                            <img src="{n['imagen']}" style="width:70%; display:block;
+                                 margin:0 auto 10px auto; border-radius:6px;">
+                            """), unsafe_allow_html=True)
                         st.markdown(f"**{n['titulo']}**")
                         st.write(n.get("descripcion", ""))
                         if n.get("link"):
                             st.markdown(f"[Leer más]({n['link']})")
-                else:
-                    st.markdown(f"**{n['titulo']}**")
-                    st.write(n.get("descripcion", ""))
-                    if n.get("link"):
-                        st.markdown(f"[Leer más]({n['link']})")
 
     st.stop()
 
