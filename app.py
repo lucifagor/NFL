@@ -41,6 +41,7 @@ from comparador_nfl import (
     obtener_marcadores_actuales,
     obtener_calendario_equipo,
     obtener_roster_equipo,
+    _DIVISIONES_NFL,
     obtener_marcadores_api_sports,
     logo_url,
     favorito_segun_mercado,
@@ -166,6 +167,17 @@ def inyectar_estilos():
     .ticker-score { font-weight:700; font-size:0.85rem; color:#000000; }
     .ticker-estado { font-size:0.7rem; color:#1F241E; text-align:center; line-height:1.3; white-space:normal; }
     .ticker-estadio { font-size:0.65rem; color:#3E4A42; font-weight:600; text-align:center; margin-top:1px; line-height:1.3; white-space:normal; }
+
+    /* Tarjetas de equipo (lista de Noticias) — logo + abreviatura como un solo botón blanco */
+    div[class*="st-key-equipo_cell_"] {
+        background: #FFFFFF; border: 1px solid #AEB4A9; border-radius: 8px;
+        padding: 6px 2px 2px 2px; text-align: center;
+    }
+    div[class*="st-key-equipo_cell_"] button {
+        background: transparent !important; border: none !important;
+        color: #14241A !important; font-weight: 700 !important; padding: 2px !important;
+    }
+    div[class*="st-key-equipo_cell_"] button:hover { color: #BD4E1E !important; }
     </style>
     """), unsafe_allow_html=True)
 
@@ -489,25 +501,44 @@ def roster_equipo_cacheado(team_abbr: str, season: int):
 
 
 def lista_equipos_sidebar():
-    """Cuadrícula de los 32 equipos (logo + abreviatura), 4 por fila —
-    clic en cualquiera lleva al detalle de ese equipo (calendario,
-    roster, standing)."""
+    """Equipos agrupados por división — el nombre de la división a la
+    izquierda, y los 4 equipos de esa división como tarjetas blancas
+    (logo grande + abreviatura) a la derecha. Clic en cualquiera lleva
+    al detalle de ese equipo (calendario, roster, standing)."""
     st.markdown(_sin_sangria("""
     <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-       font-size:1.1rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 8px 0;
+       font-size:1.1rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
        text-align:center;">EQUIPOS</p>
     """), unsafe_allow_html=True)
-    por_fila = 4
-    for i in range(0, len(EQUIPOS), por_fila):
-        fila = EQUIPOS[i:i + por_fila]
-        cols = st.columns(por_fila)
-        for col, abbr in zip(cols, fila):
+
+    # Agrupa los 32 equipos por división, en orden AFC Este..NFC Oeste.
+    divisiones = {}
+    for abbr in EQUIPOS:
+        _, division = _DIVISIONES_NFL.get(abbr, ("?", "Otros"))
+        divisiones.setdefault(division, []).append(abbr)
+
+    orden = ["AFC Este", "AFC Norte", "AFC Sur", "AFC Oeste",
+             "NFC Este", "NFC Norte", "NFC Sur", "NFC Oeste"]
+
+    for division in orden:
+        equipos_division = divisiones.get(division, [])
+        if not equipos_division:
+            continue
+        col_div, *cols_equipos = st.columns([1.1, 1, 1, 1, 1])
+        with col_div:
+            st.markdown(_sin_sangria(f"""
+            <div style="display:flex; align-items:center; justify-content:center; height:100%;
+                 font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.78rem;
+                 color:#9CB3A3; text-align:center; line-height:1.15;">{division}</div>
+            """), unsafe_allow_html=True)
+        for col, abbr in zip(cols_equipos, equipos_division):
             with col:
-                st.image(logo_url(abbr), width=22)
-                if st.button(abbr, key=f"lista_equipo_{abbr}", use_container_width=True):
-                    st.session_state.equipo_detalle = abbr
-                    st.session_state.pagina = "equipo_detalle"
-                    st.rerun()
+                with st.container(key=f"equipo_cell_{abbr}"):
+                    st.image(logo_url(abbr), width=34)
+                    if st.button(abbr, key=f"lista_equipo_{abbr}", use_container_width=True):
+                        st.session_state.equipo_detalle = abbr
+                        st.session_state.pagina = "equipo_detalle"
+                        st.rerun()
 
 
 def renderizar_noticias(noticias: list):
