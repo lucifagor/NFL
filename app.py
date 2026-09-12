@@ -234,11 +234,15 @@ def ticker_marcadores(partidos: list, standings: pd.DataFrame = None):
 
 
 def hero(titulo: str, subtitulo: str = ""):
-    """Encabezado con el mismo tono condensado en toda la app, con una
-    barra de acento — más deliberado que un st.title suelto."""
+    """Título de sección centrado, más grande, con una línea de acento
+    a cada lado (simétrico)."""
     st.markdown(_sin_sangria(f"""
-    <div style="border-left: 4px solid #F2994A; padding-left: 16px; margin-bottom: 8px;">
-        <h1 style="margin: 0; font-size: 2.4rem;">{titulo}</h1>
+    <div style="text-align:center; margin: 0 0 10px 0;">
+        <div style="display:flex; align-items:center; justify-content:center; gap:18px;">
+            <span style="flex:1; max-width:110px; height:3px; background:#F2994A; border-radius:2px;"></span>
+            <h1 style="margin:0; font-size:3.1rem; white-space:nowrap;">{titulo}</h1>
+            <span style="flex:1; max-width:110px; height:3px; background:#F2994A; border-radius:2px;"></span>
+        </div>
         {f'<p style="color: #9CB3A3; margin-top: 4px;">{subtitulo}</p>' if subtitulo else ''}
     </div>
     """), unsafe_allow_html=True)
@@ -326,7 +330,7 @@ def barra_navegacion(activo: str):
                     st.session_state.pagina = clave
                     st.rerun()
 
-    st.markdown('<hr style="border-color:#26402F; margin-top:0;">', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:#26402F; margin-top:0; margin-bottom:6px;">', unsafe_allow_html=True)
 
 
 def encabezado_sitio(activo: str):
@@ -624,7 +628,6 @@ if not NFL_DATA_PY_OK:
 if st.session_state.pagina == "inicio":
     encabezado_sitio("inicio")
 
-    st.divider()
     hero(
         '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#F2994A;">News</span>',
     )
@@ -637,22 +640,30 @@ if st.session_state.pagina == "inicio":
     elif not noticias:
         st.info("No hay noticias disponibles en este momento.")
     else:
-        # Dos columnas: foto arriba (30% más chica) y texto de la nota abajo.
+        # Dos columnas: foto (clicable, tamaño parejo) arriba, nota abajo.
         for i in range(0, len(noticias), 2):
             par = noticias[i:i + 2]
             cols = st.columns(2)
             for col, n in zip(cols, par):
                 with col:
                     with st.container(border=True):
+                        link = n.get("link", "")
+                        imagen_html = ""
                         if n.get("imagen"):
-                            st.markdown(_sin_sangria(f"""
-                            <img src="{n['imagen']}" style="width:70%; display:block;
-                                 margin:0 auto 10px auto; border-radius:6px;">
-                            """), unsafe_allow_html=True)
-                        st.markdown(f"**{n['titulo']}**")
-                        st.write(n.get("descripcion", ""))
-                        if n.get("link"):
-                            st.markdown(f"[Leer más]({n['link']})")
+                            img_tag = (
+                                f'<img src="{n["imagen"]}" style="width:70%; aspect-ratio:16/10; '
+                                f'object-fit:cover; border-radius:6px; margin:0 auto 10px auto; display:block;">'
+                            )
+                            imagen_html = f'<a href="{link}">{img_tag}</a>' if link else img_tag
+
+                        st.markdown(_sin_sangria(f"""
+                        <div style="text-align:center;">
+                            {imagen_html}
+                            <p style="font-weight:700; margin:0 0 6px 0;">{n['titulo']}</p>
+                            <p style="color:#CDD1C7; font-size:0.9rem; margin:0 0 8px 0;">{n.get('descripcion', '')}</p>
+                            {f'<a href="{link}">Leer más</a>' if link else ''}
+                        </div>
+                        """), unsafe_allow_html=True)
 
     st.stop()
 
