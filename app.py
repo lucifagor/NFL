@@ -289,8 +289,12 @@ def barra_navegacion(activo: str):
 
     with col_logo:
         st.markdown(_sin_sangria(f"""
-        <div style="display:flex; align-items:center; justify-content:center; height:100%; padding:8px 0;">
-            <img src="{LOGO_ESCUDO_URL}" style="width:96px; height:auto;">
+        <div style="display:flex; align-items:center; justify-content:flex-start; height:100%; padding:8px 0; gap:10px;">
+            <img src="{LOGO_ESCUDO_URL}" style="width:100px; height:auto; flex-shrink:0;">
+            <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; line-height:0.95;">
+                <div style="font-size:1.9rem; color:#F1F4F9;">NFL</div>
+                <div style="font-size:1.9rem; color:#F2994A;">WARRIORS</div>
+            </div>
         </div>
         """), unsafe_allow_html=True)
 
