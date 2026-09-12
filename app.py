@@ -224,7 +224,7 @@ def hero(titulo: str, subtitulo: str = ""):
 # Logo oficial de NFLWarriors — súbelos a tu repo de GitHub en una carpeta
 # "assets/" y ajusta esta ruta si tu usuario/repo son distintos.
 LOGO_ESCUDO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/escudo.png"
-LOGO_TEXTO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/wordmark.png"
+LOGO_TEXTO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/wordmark_transparente.png"
 LOGO_COMPLETO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/escudo_completo.png"
 BANNER_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/banner.png"
 
@@ -291,10 +291,7 @@ def barra_navegacion(activo: str):
         st.markdown(_sin_sangria(f"""
         <div style="display:flex; align-items:center; justify-content:flex-start; height:100%; padding:8px 0; gap:10px;">
             <img src="{LOGO_ESCUDO_URL}" style="width:100px; height:auto; flex-shrink:0;">
-            <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; line-height:0.95;">
-                <div style="font-size:1.9rem; color:#F1F4F9;">NFL</div>
-                <div style="font-size:1.9rem; color:#F2994A;">WARRIORS</div>
-            </div>
+            <img src="{LOGO_TEXTO_URL}" style="height:85px; width:auto;">
         </div>
         """), unsafe_allow_html=True)
 
