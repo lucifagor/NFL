@@ -33,7 +33,9 @@ from comparador_nfl import (
     obtener_lineas_apuestas,
     obtener_noticias_nfl,
     obtener_lesiones_liga,
+    obtener_lesiones_liga_api_sports,
     obtener_standings,
+    obtener_standings_api_sports,
     logo_url,
     favorito_segun_mercado,
     comparar_equipos,
@@ -44,6 +46,11 @@ from comparador_nfl import (
     OPENWEATHER_API_KEY,
     ODDS_API_KEY,
 )
+
+try:
+    API_SPORTS_KEY = st.secrets.get("API_SPORTS_KEY", "")
+except Exception:
+    API_SPORTS_KEY = ""
 
 st.set_page_config(page_title="Comparador NFL", page_icon="🏈", layout="centered")
 
@@ -115,12 +122,29 @@ def noticias_cacheadas(limite: int = 10):
 
 
 @st.cache_data(show_spinner=False, ttl=900)
-def lesiones_liga_cacheadas(limite: int = 25):
+def lesiones_liga_cacheadas(limite: int = 25, season: int = None, api_key: str = ""):
+    """Usa API-Sports si hay key configurada (más confiable); si no, o si
+    falla, cae de vuelta al scraping de ESPN equipo por equipo."""
+    if api_key:
+        try:
+            return obtener_lesiones_liga_api_sports(api_key, season, limite)
+        except Exception as e:
+            resultado = obtener_lesiones_liga(limite)
+            if resultado and "error" not in resultado[0]:
+                return resultado
+            return [{"error": f"API-Sports falló ({e}) y el respaldo de ESPN también."}]
     return obtener_lesiones_liga(limite)
 
 
 @st.cache_data(show_spinner=False, ttl=900)
-def standings_cacheados(season: int):
+def standings_cacheados(season: int, api_key: str = ""):
+    """Usa API-Sports si hay key configurada (datos oficiales completos);
+    si no, o si falla, cae de vuelta al cálculo manual desde nfl_data_py."""
+    if api_key:
+        try:
+            return obtener_standings_api_sports(api_key, season)
+        except Exception:
+            pass
     return obtener_standings(season)
 
 
@@ -271,7 +295,7 @@ if st.session_state.pagina == "inicio":
     st.divider()
     st.subheader("🤕 Lesiones recientes (toda la liga)")
     with st.spinner("Cargando lesiones..."):
-        lesiones = lesiones_liga_cacheadas()
+        lesiones = lesiones_liga_cacheadas(season=datetime.date.today().year, api_key=API_SPORTS_KEY)
 
     if lesiones and "error" in lesiones[0]:
         st.info(f"No se pudo cargar el reporte de lesiones: {lesiones[0]['error']}")
@@ -301,18 +325,46 @@ if st.session_state.pagina == "estadisticas":
     )
     with st.spinner("Cargando tabla de posiciones..."):
         try:
-            standings = standings_cacheados(season_standings)
+            standings = standings_cacheados(season_standings, api_key=API_SPORTS_KEY)
             if standings.empty:
                 st.info("No se pudo cargar la tabla de posiciones.")
             else:
+                standings = standings.copy()
+                standings["Logo"] = standings["Equipo"].map(logo_url)
+                standings["Equipo"] = standings["Equipo"].map(lambda a: NOMBRES_EQUIPO.get(a, a))
+
+                if API_SPORTS_KEY and "PF" in standings.columns:
+                    st.caption("📡 Datos oficiales en tiempo real vía API-Sports")
+
+                columnas_orden = ["Logo", "Equipo", "V", "D", "E"]
+                config_columnas = {
+                    "Logo": st.column_config.ImageColumn("", width="small"),
+                    "Equipo": st.column_config.TextColumn("Equipo", width="medium"),
+                    "V": st.column_config.NumberColumn("V", width="small"),
+                    "D": st.column_config.NumberColumn("D", width="small"),
+                    "E": st.column_config.NumberColumn("E", width="small"),
+                }
+                if "PF" in standings.columns:
+                    columnas_orden += ["PF", "PC"]
+                    config_columnas["PF"] = st.column_config.NumberColumn("PF", width="small", help="Puntos a favor")
+                    config_columnas["PC"] = st.column_config.NumberColumn("PC", width="small", help="Puntos en contra")
+                if "Racha" in standings.columns:
+                    columnas_orden.append("Racha")
+                    config_columnas["Racha"] = st.column_config.TextColumn("Racha", width="small")
+                columnas_orden.append("% Victorias")
+                config_columnas["% Victorias"] = st.column_config.ProgressColumn(
+                    "% Victorias", min_value=0, max_value=100, format="%.0f%%",
+                )
+
                 for conf in sorted(standings["Conferencia"].unique()):
                     st.subheader(conf)
                     conf_df = standings[standings["Conferencia"] == conf]
                     for div in sorted(conf_df["División"].unique()):
                         st.markdown(f"**{div}**")
                         st.dataframe(
-                            conf_df[conf_df["División"] == div].drop(columns=["Conferencia", "División"]),
+                            conf_df[conf_df["División"] == div][columnas_orden],
                             use_container_width=True, hide_index=True,
+                            column_config=config_columnas,
                         )
         except Exception as e:
             st.error(f"No se pudo cargar la tabla de posiciones: {e}")

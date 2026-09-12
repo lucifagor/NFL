@@ -576,6 +576,138 @@ def obtener_marcadores_actuales() -> list:
         return [{"error": str(e)}]
 
 
+# ---------------------------------------------------------------------------
+# 3c. API-SPORTS (api-sports.io) — cuenta de pago del usuario, datos
+#     oficiales de NFL: standings, lesiones. La API key NUNCA se hardcodea
+#     aquí — se recibe como parámetro desde app.py, que la lee de
+#     st.secrets (privado, no se sube a GitHub).
+# ---------------------------------------------------------------------------
+API_SPORTS_BASE_URL = "https://v1.american-football.api-sports.io"
+API_SPORTS_LEAGUE_NFL = 1
+
+# Apodo de cada equipo, usado para cruzar el nombre completo que devuelve
+# API-Sports (ej. "Kansas City Chiefs") con nuestra abreviatura (KC) sin
+# depender de que sus códigos de equipo coincidan con los de nflverse.
+_APODOS_NFL = {
+    "ARI": "Cardinals", "ATL": "Falcons", "BAL": "Ravens", "BUF": "Bills",
+    "CAR": "Panthers", "CHI": "Bears", "CIN": "Bengals", "CLE": "Browns",
+    "DAL": "Cowboys", "DEN": "Broncos", "DET": "Lions", "GB": "Packers",
+    "HOU": "Texans", "IND": "Colts", "JAX": "Jaguars", "KC": "Chiefs",
+    "LA": "Rams", "LAC": "Chargers", "LV": "Raiders", "MIA": "Dolphins",
+    "MIN": "Vikings", "NE": "Patriots", "NO": "Saints", "NYG": "Giants",
+    "NYJ": "Jets", "PHI": "Eagles", "PIT": "Steelers", "SEA": "Seahawks",
+    "SF": "49ers", "TB": "Buccaneers", "TEN": "Titans", "WAS": "Commanders",
+}
+
+
+def _abbr_desde_nombre_api_sports(nombre_equipo: str) -> str:
+    """Traduce 'Kansas City Chiefs' -> 'KC' usando el apodo. Si no encuentra
+    coincidencia, regresa el nombre tal cual (mejor mostrar algo que nada)."""
+    for abbr, apodo in _APODOS_NFL.items():
+        if apodo.lower() in nombre_equipo.lower():
+            return abbr
+    return nombre_equipo
+
+
+def _api_sports_get(api_key: str, endpoint: str, params: dict) -> dict:
+    """Llamada genérica a API-Sports con manejo de errores consistente."""
+    if not api_key:
+        raise ValueError("Falta la API key de API-Sports (configúrala en Streamlit Secrets).")
+    r = requests.get(
+        f"{API_SPORTS_BASE_URL}{endpoint}",
+        headers={"x-apisports-key": api_key},
+        params=params, timeout=15,
+    )
+    r.raise_for_status()
+    data = r.json()
+    if data.get("errors"):
+        raise ValueError(f"API-Sports respondió con error: {data['errors']}")
+    return data
+
+
+def obtener_standings_api_sports(api_key: str, season: int) -> pd.DataFrame:
+    """
+    Tabla de posiciones oficial vía API-Sports — incluye conferencia,
+    división, récord, puntos a favor/en contra y racha actual. Requiere
+    tu API key de api-sports.io (cuenta de pago del usuario).
+    """
+    data = _api_sports_get(api_key, "/standings", {"league": API_SPORTS_LEAGUE_NFL, "season": season})
+
+    filas = []
+    for item in data.get("response", []):
+        nombre_api = (item.get("team") or {}).get("name", "?")
+        abbr = _abbr_desde_nombre_api_sports(nombre_api)
+        puntos = item.get("points") or {}
+        v, d, e = item.get("won", 0) or 0, item.get("lost", 0) or 0, item.get("ties", 0) or 0
+        total = v + d + e
+        filas.append({
+            "Conferencia": "AFC" if "American" in (item.get("conference") or "") else "NFC",
+            "División": item.get("division", "?"),
+            "Equipo": abbr,
+            "V": v, "D": d, "E": e,
+            "PF": puntos.get("for", 0), "PC": puntos.get("against", 0),
+            "Racha": item.get("streak", "") or "",
+            "% Victorias": round((v + 0.5 * e) / total * 100, 1) if total else 0.0,
+        })
+
+    df = pd.DataFrame(filas)
+    if not df.empty:
+        df = df.sort_values(["Conferencia", "División", "% Victorias"], ascending=[True, True, False]).reset_index(drop=True)
+    return df
+
+
+def obtener_equipos_api_sports(api_key: str, season: int) -> dict:
+    """Devuelve {abbr: id_api_sports} para poder consultar /injuries por equipo."""
+    data = _api_sports_get(api_key, "/teams", {"league": API_SPORTS_LEAGUE_NFL, "season": season})
+    mapeo = {}
+    for item in data.get("response", []):
+        nombre = item.get("name", "")
+        abbr = _abbr_desde_nombre_api_sports(nombre)
+        if item.get("id") is not None:
+            mapeo[abbr] = item["id"]
+    return mapeo
+
+
+def obtener_lesiones_liga_api_sports(api_key: str, season: int, limite: int = 30) -> list:
+    """
+    Lesiones recientes de toda la liga vía API-Sports (más confiable que
+    scrapear ESPN equipo por equipo). Consume 1 request por equipo (32
+    en total) más 1 para el catálogo de equipos — cuidado con el límite
+    diario en el plan gratuito (100/día).
+    """
+    import concurrent.futures
+
+    equipos = obtener_equipos_api_sports(api_key, season)
+    if not equipos:
+        raise ValueError("No se pudo obtener el catálogo de equipos de API-Sports.")
+
+    def _lesiones_de_equipo(item):
+        abbr, team_id = item
+        try:
+            data = _api_sports_get(api_key, "/injuries", {"team": team_id})
+            filas = []
+            for lesion in data.get("response", []):
+                jugador = lesion.get("player") or {}
+                filas.append({
+                    "equipo": abbr,
+                    "jugador": jugador.get("name", "?"),
+                    "estado": lesion.get("status", "?"),
+                    "detalle": lesion.get("description", "") or "",
+                    "fecha": lesion.get("date", "") or "",
+                })
+            return filas
+        except Exception:
+            return []
+
+    resultado = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        for filas in executor.map(_lesiones_de_equipo, equipos.items()):
+            resultado.extend(filas)
+
+    resultado.sort(key=lambda x: x.get("fecha") or "", reverse=True)
+    return resultado[:limite]
+
+
 _DIVISIONES_NFL = {
     "BUF": ("AFC", "AFC Este"), "MIA": ("AFC", "AFC Este"), "NE": ("AFC", "AFC Este"), "NYJ": ("AFC", "AFC Este"),
     "BAL": ("AFC", "AFC Norte"), "CIN": ("AFC", "AFC Norte"), "CLE": ("AFC", "AFC Norte"), "PIT": ("AFC", "AFC Norte"),
@@ -605,7 +737,7 @@ def obtener_standings(season: int) -> pd.DataFrame:
     if jugados.empty:
         raise ValueError(f"Todavía no se ha jugado ningún partido en la temporada {season}.")
 
-    registros = {}
+    registros = {equipo: {"V": 0, "D": 0, "E": 0} for equipo in _DIVISIONES_NFL}
     for _, partido in jugados.iterrows():
         home, away = partido["home_team"], partido["away_team"]
         hs, aw = partido["home_score"], partido["away_score"]
