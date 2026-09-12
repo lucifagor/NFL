@@ -54,6 +54,82 @@ except Exception:
 
 st.set_page_config(page_title="Comparador NFL", page_icon="🏈", layout="centered")
 
+
+def inyectar_estilos():
+    """Capa visual del sitio — tipografía condensada tipo marcador de
+    estadio para títulos, Inter para el resto, acento dorado único
+    (evita el look genérico de plantilla)."""
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+    h1, h2, h3 {
+        font-family: 'Barlow Condensed', sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.01em;
+    }
+
+    /* Oculta el chrome por default de Streamlit para un look más limpio */
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
+    header[data-testid="stHeader"] { background: transparent; }
+
+    /* Botón primario: acento dorado único */
+    [data-testid="stButton"] button[kind="primary"] {
+        background: #FFB627;
+        color: #0B0F1A;
+        border: none;
+        font-weight: 600;
+        border-radius: 6px;
+    }
+    [data-testid="stButton"] button[kind="primary"]:hover {
+        background: #FFC659;
+        color: #0B0F1A;
+    }
+    [data-testid="stButton"] button:not([kind="primary"]) {
+        border-radius: 6px;
+        border: 1px solid #2A3348;
+    }
+
+    /* Métricas con el tono condensado del marcador */
+    [data-testid="stMetricValue"] {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 700;
+    }
+    [data-testid="stMetricLabel"] { color: #8B96AC; }
+
+    /* Tabs: subrayado dorado en la pestaña activa */
+    [data-testid="stTabs"] button[aria-selected="true"] {
+        color: #FFB627 !important;
+        border-bottom-color: #FFB627 !important;
+    }
+
+    /* Barra de progreso (probabilidad) en dorado */
+    [data-testid="stProgress"] > div > div > div {
+        background-color: #FFB627 !important;
+    }
+
+    /* Sidebar con borde sutil */
+    [data-testid="stSidebar"] { border-right: 1px solid #2A3348; }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def hero(titulo: str, subtitulo: str = ""):
+    """Encabezado con el mismo tono condensado en toda la app, con una
+    barra de acento — más deliberado que un st.title suelto."""
+    st.markdown(f"""
+    <div style="border-left: 4px solid #FFB627; padding-left: 16px; margin-bottom: 8px;">
+        <h1 style="margin: 0; font-size: 2.4rem;">{titulo}</h1>
+        {f'<p style="color: #8B96AC; margin-top: 4px;">{subtitulo}</p>' if subtitulo else ''}
+    </div>
+    """, unsafe_allow_html=True)
+
+
+inyectar_estilos()
+
 EQUIPOS = [
     "ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE", "DAL", "DEN",
     "DET", "GB", "HOU", "IND", "JAX", "KC", "LA", "LAC", "LV", "MIA",
@@ -255,8 +331,7 @@ if not NFL_DATA_PY_OK:
 # PANTALLA: INICIO — solo noticias y lesiones recientes de la liga
 # ============================================================
 if st.session_state.pagina == "inicio":
-    st.title("🏈 NFL — Noticias")
-    st.caption("Lo último de la liga, antes de ver los pronósticos.")
+    hero("🏈 NFL — Noticias", "Lo último de la liga, antes de ver los pronósticos.")
 
     if st.button("🔮 Ver pronósticos", type="primary", use_container_width=True):
         st.session_state.pagina = "pronosticos"
@@ -318,7 +393,7 @@ if st.session_state.pagina == "estadisticas":
         st.session_state.pagina = "inicio"
         st.rerun()
 
-    st.title("📊 Tabla de posiciones")
+    hero("📊 Tabla de posiciones")
     season_standings = st.number_input(
         "Temporada", min_value=2015, max_value=2027,
         value=datetime.date.today().year, key="season_standings",
@@ -387,7 +462,7 @@ if st.session_state.pagina == "detalle":
         st.stop()
 
     away, home, season, temp_hist = ctx["away"], ctx["home"], ctx["season"], ctx["temporadas_historicas"]
-    st.title(f"🔍 {nombre_equipo(away)} @ {nombre_equipo(home)}")
+    hero(f"🔍 {nombre_equipo(away)} @ {nombre_equipo(home)}")
 
     with st.spinner("Cargando detalle..."):
         try:
@@ -414,8 +489,7 @@ if st.button("← Volver a inicio"):
     st.session_state.pagina = "inicio"
     st.rerun()
 
-st.title("🏈 Comparador de equipos NFL")
-st.caption("Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.")
+hero("🏈 Comparador de equipos NFL", "Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.")
 
 # --- Barra lateral: pesos del modelo (compartidos por las tres pestañas) ---
 with st.sidebar:
