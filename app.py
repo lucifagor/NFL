@@ -52,7 +52,7 @@ try:
 except Exception:
     API_SPORTS_KEY = ""
 
-st.set_page_config(page_title="Comparador NFL", page_icon="🏈", layout="centered")
+st.set_page_config(page_title="Comparador NFL", page_icon="🏈", layout="wide")
 
 
 def _sin_sangria(html: str) -> str:
@@ -182,7 +182,7 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         filas_html += f"""
         <tr>
             <td style="padding:6px 6px; width:30px; background:#0E1B33;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
-            <td style="padding:6px 8px; font-weight:700; color:#F5F7FA; white-space:nowrap; background:#0E1B33;">{NOMBRES_EQUIPO.get(row['Equipo'], row['Equipo'])}</td>
+            <td style="padding:8px 10px; font-weight:700; color:#F5F7FA; white-space:nowrap; background:#0E1B33; font-size:1rem;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
             <td style="text-align:center; color:#E4E8EF; background:#0E1B33;">{row['V']}</td>
             <td style="text-align:center; color:#E4E8EF; background:#0E1B33;">{row['D']}</td>
             <td style="text-align:center; color:#E4E8EF; background:#0E1B33;">{row['E']}</td>
@@ -190,15 +190,19 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         </tr>"""
 
     return _sin_sangria(f"""
-    <div style="border:3px solid {color_borde}; border-radius:4px; overflow:hidden; margin-bottom:18px;">
-    <table style="width:100%; border-collapse:collapse; font-family:'Inter',sans-serif;">
+    <div style="border:3px solid {color_borde}; border-radius:4px; overflow:hidden; margin-bottom:20px; min-width:340px;">
+    <table style="width:100%; border-collapse:collapse; font-family:'Inter',sans-serif; table-layout:fixed;">
+        <colgroup>
+            <col style="width:38px;"><col><col style="width:36px;">
+            <col style="width:36px;"><col style="width:36px;"><col style="width:54px;">
+        </colgroup>
         <tr style="background:{color_header};">
-            <td colspan="2" style="padding:6px 8px; color:white; font-weight:700;
-                font-family:'Barlow Condensed',sans-serif; font-size:1rem;">{nombre_division}</td>
-            <td style="text-align:center; color:white; font-weight:700; width:26px; font-size:0.8rem;">G</td>
-            <td style="text-align:center; color:white; font-weight:700; width:26px; font-size:0.8rem;">P</td>
-            <td style="text-align:center; color:white; font-weight:700; width:26px; font-size:0.8rem;">E</td>
-            <td style="text-align:center; color:white; font-weight:700; width:44px; font-size:0.8rem;">.PCT</td>
+            <td colspan="2" style="padding:8px 10px; color:white; font-weight:700;
+                font-family:'Barlow Condensed',sans-serif; font-size:1.1rem;">{nombre_division}</td>
+            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem;">G</td>
+            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem;">P</td>
+            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem;">E</td>
+            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem;">.PCT</td>
         </tr>
         {filas_html}
     </table>
@@ -465,7 +469,9 @@ if st.session_state.pagina == "estadisticas":
                 .banda-conf { padding: 12px; text-align: center;
                     font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
                     font-size: 1.5rem; color: white; margin-bottom: 10px; }
-                .emblema-nfl { position: sticky; top: 40%; text-align: center; font-size: 3rem; }
+                .emblema-nfl { position: sticky; top: 40%; text-align: center; }
+                .emblema-nfl span { display:inline-block; font-size: 2.6rem; transform: rotate(-20deg);
+                    background: radial-gradient(circle, #1C2B4A 60%, transparent 62%); padding: 14px; border-radius: 50%; }
                 </style>
                 """), unsafe_allow_html=True)
 
@@ -479,7 +485,7 @@ if st.session_state.pagina == "estadisticas":
                         st.markdown(tabla_division_html(div, filas, "#DB8F6E", "#C8102E"), unsafe_allow_html=True)
 
                 with col_centro:
-                    st.markdown('<div class="emblema-nfl">🏈</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="emblema-nfl"><span>🏈</span></div>', unsafe_allow_html=True)
 
                 with col_nfc:
                     st.markdown('<div class="banda-conf" style="background:#1D4E8F;">NFC Football Conference</div>', unsafe_allow_html=True)
