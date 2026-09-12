@@ -141,7 +141,7 @@ def inyectar_estilos():
         flex: 0 0 auto; border: 1px solid #AEB4A9; border-radius: 6px;
         overflow: hidden; min-width: 140px; max-width: 170px;
     }
-    .ticker-equipos { background: #DCDFD9; padding: 6px 10px; }
+    .ticker-equipos { background: #FFFFFF; padding: 6px 10px; }
     .ticker-info { background: #CDD1C7; padding: 5px 10px; }
     .ticker-equipo { display:flex; align-items:center; justify-content:flex-start; gap:6px; }
     .ticker-equipo img { width:20px; height:20px; }
@@ -154,52 +154,11 @@ def inyectar_estilos():
 
 
 def franja_campo():
-    """Banner ilustrado tipo estadio (estático): graderías arriba, campo
-    en perspectiva con líneas de yarda, postes de gol en los bordes, y
-    el escudo NFLWarriors al centro del campo."""
-    # Líneas de yarda con perspectiva (el campo es un trapecio: ancho
-    # abajo, angosto arriba, hacia el "horizonte" de las graderías).
-    lineas = ""
-    for i in range(1, 6):
-        f = i / 6
-        ancho = 900 - 600 * f
-        x_izq = 150 + 300 * f
-        y = 200 - 140 * f
-        grosor = max(1.0, 3 - f * 2)
-        lineas += (
-            f'<line x1="{x_izq:.0f}" y1="{y:.0f}" x2="{x_izq + ancho:.0f}" y2="{y:.0f}" '
-            f'stroke="#FFFFFF" stroke-width="{grosor:.1f}" opacity="0.85"/>'
-        )
-
-    asientos = "".join(
-        f'<rect x="{i * 60}" y="4" width="46" height="46" fill="{"#C0552F" if i % 2 == 0 else "#9C4127"}"/>'
-        for i in range(20)
-    )
-
+    """Banner del estadio — una sola imagen (subida por el usuario), en
+    vez de la ilustración construida con SVG."""
     st.markdown(_sin_sangria(f"""
     <div class="franja-campo">
-        <svg viewBox="0 0 1200 200" width="100%" height="150" preserveAspectRatio="none" style="display:block;">
-            <defs>
-                <linearGradient id="gradaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#8A3A2A"/>
-                    <stop offset="100%" stop-color="#5C2A1E"/>
-                </linearGradient>
-                <linearGradient id="campoGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#1F6B3A"/>
-                    <stop offset="100%" stop-color="#2A8449"/>
-                </linearGradient>
-            </defs>
-            <rect x="0" y="0" width="1200" height="55" fill="url(#gradaGrad)"/>
-            {asientos}
-            <rect x="0" y="52" width="1200" height="8" fill="#16261B"/>
-            <rect x="0" y="55" width="175" height="145" fill="#0F2015"/>
-            <rect x="1025" y="55" width="175" height="145" fill="#0F2015"/>
-            <polygon points="150,200 1050,200 750,60 450,60" fill="url(#campoGrad)"/>
-            {lineas}
-            <path d="M60 195 L60 150 M60 150 L40 110 M60 150 L80 110" stroke="#F2994A" stroke-width="4" fill="none" stroke-linecap="round"/>
-            <path d="M1140 195 L1140 150 M1140 150 L1120 110 M1140 150 L1160 110" stroke="#F2994A" stroke-width="4" fill="none" stroke-linecap="round"/>
-            <image href="{LOGO_ESCUDO_URL}" x="535" y="112" width="130" height="130"/>
-        </svg>
+        <img src="{BANNER_URL}" style="width:100%; height:auto; display:block;">
     </div>
     """), unsafe_allow_html=True)
 
@@ -266,6 +225,8 @@ def hero(titulo: str, subtitulo: str = ""):
 # "assets/" y ajusta esta ruta si tu usuario/repo son distintos.
 LOGO_ESCUDO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/escudo.png"
 LOGO_TEXTO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/wordmark.png"
+LOGO_COMPLETO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/escudo_completo.png"
+BANNER_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/banner.png"
 
 
 def _escudo_svg(tamano: int = 40) -> str:
@@ -315,27 +276,21 @@ _SECCIONES_NAV = [
 ]
 
 
-def barra_navegacion(activo: str):
-    """Menú horizontal tipo NFL.com — logo a la izquierda, secciones a la
-    derecha. La sección activa se muestra resaltada (botón dorado); el
-    resto, como link discreto."""
-    st.markdown(_sin_sangria("""
-    <style>
-    .nav-marca { display:flex; align-items:center; gap:10px; height:100%; }
-    </style>
+def logo_grande_centrado():
+    """Logo combinado (escudo + texto) en grande, centrado — va entre los
+    resultados de la semana y el menú de navegación."""
+    st.markdown(_sin_sangria(f"""
+    <div style="text-align:center; margin: 6px 0 10px 0;">
+        <img src="{LOGO_COMPLETO_URL}" style="max-width: 320px; width: 55%; height: auto;">
+    </div>
     """), unsafe_allow_html=True)
 
-    col_marca, col_nav = st.columns([2, 5])
-    with col_marca:
-        st.markdown(_sin_sangria(f"""
-        <div class="nav-marca">
-            {_escudo_svg(30)}
-            <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.25rem;">
-                <span style="color:#F1F4F9;">NFL</span> <span style="color:#F2994A;">WARRIORS</span>
-            </div>
-        </div>
-        """), unsafe_allow_html=True)
 
+def barra_navegacion(activo: str):
+    """Menú horizontal centrado, sin logo (el logo grande va aparte,
+    arriba de este menú). La sección activa se muestra resaltada (botón
+    dorado); el resto, como botón discreto."""
+    col_izq, col_nav, col_der = st.columns([1, 3, 1])
     with col_nav:
         cols = st.columns(len(_SECCIONES_NAV))
         for col, (clave, etiqueta) in zip(cols, _SECCIONES_NAV):
@@ -354,12 +309,13 @@ def barra_navegacion(activo: str):
 
 def encabezado_sitio(activo: str):
     """Encabezado compartido por TODA la app: franja de campo, resultados
-    de la semana, y el menú de navegación — se ve igual arriba de
-    cualquier pantalla en la que estés."""
+    de la semana, logo grande centrado, y el menú de navegación — se ve
+    igual arriba de cualquier pantalla en la que estés."""
     franja_campo()
     with st.spinner("Cargando marcadores..."):
         partidos_ticker = marcadores_cacheados(datetime.date.today().year, api_key=API_SPORTS_KEY)
     ticker_marcadores(partidos_ticker)
+    logo_grande_centrado()
     barra_navegacion(activo)
 
 
@@ -643,10 +599,17 @@ if st.session_state.pagina == "inicio":
     encabezado_sitio("inicio")
 
     st.divider()
-    hero("Noticias", "Lo último de la liga, antes de ver los pronósticos.")
+    hero(
+        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#F2994A;">News</span>',
+        "Lo último de la liga, antes de ver los pronósticos.",
+    )
 
     st.divider()
-    st.subheader("📰 Noticias recientes")
+    st.markdown(
+        '<h3><span style="color:#F1F4F9;">📰 NFL Warriors</span> '
+        '<span style="color:#F2994A;">News</span></h3>',
+        unsafe_allow_html=True,
+    )
     with st.spinner("Cargando noticias..."):
         noticias = noticias_cacheadas()
 
