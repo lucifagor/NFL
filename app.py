@@ -190,9 +190,8 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         </tr>"""
 
     return _sin_sangria(f"""
-    <table style="width:100%; border-collapse:collapse; margin-bottom:18px;
-                   font-family:'Inter',sans-serif;
-                   border-radius:4px; overflow:hidden; border:2px solid {color_borde};">
+    <div style="border:3px solid {color_borde}; border-radius:4px; overflow:hidden; margin-bottom:18px;">
+    <table style="width:100%; border-collapse:collapse; font-family:'Inter',sans-serif;">
         <tr style="background:{color_header};">
             <td colspan="2" style="padding:6px 8px; color:white; font-weight:700;
                 font-family:'Barlow Condensed',sans-serif; font-size:1rem;">{nombre_division}</td>
@@ -203,6 +202,7 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         </tr>
         {filas_html}
     </table>
+    </div>
     """)
 
 
