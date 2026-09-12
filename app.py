@@ -68,6 +68,19 @@ def inyectar_estilos():
     """Capa visual del sitio — tipografía condensada tipo marcador de
     estadio para títulos, Inter para el resto, acento dorado único
     (evita el look genérico de plantilla)."""
+    st.markdown(_sin_sangria(f"""
+    <style>
+    [data-testid="stAppViewContainer"] {{
+        background-image: url("{FONDO_URL}");
+        background-size: cover;
+        background-position: center top;
+        background-attachment: fixed;
+        background-repeat: no-repeat;
+    }}
+    [data-testid="stAppViewContainer"] > .main {{ background: transparent; }}
+    </style>
+    """), unsafe_allow_html=True)
+
     st.markdown(_sin_sangria("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap');
@@ -227,6 +240,7 @@ LOGO_ESCUDO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/e
 LOGO_TEXTO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/wordmark_transparente.png"
 LOGO_COMPLETO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/escudo_completo.png"
 BANNER_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/banner.png"
+FONDO_URL = "https://raw.githubusercontent.com/lucifagor/nfl/main/assets/fondo.png"
 
 
 def _escudo_svg(tamano: int = 40) -> str:
@@ -283,22 +297,28 @@ def logo_grande_centrado():
 
 
 def barra_navegacion(activo: str):
-    """Escudo (transparente, chico) a la izquierda; menú en cuadrícula
-    2x2 a la derecha. La sección activa se resalta en dorado."""
-    col_logo, col_menu = st.columns([1, 2.2])
+    """Logo (escudo + texto) centrado arriba; abajo, un casco a cada lado
+    del menú, que va en una sola línea entre ambos. La sección activa se
+    resalta en dorado."""
+    st.markdown(_sin_sangria(f"""
+    <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:12px;">
+        <img src="{LOGO_ESCUDO_URL}" style="width:70px; height:auto;">
+        <img src="{LOGO_TEXTO_URL}" style="height:60px; width:auto;">
+    </div>
+    """), unsafe_allow_html=True)
 
-    with col_logo:
+    col_izq, col_menu, col_der = st.columns([1, 6, 1])
+
+    with col_izq:
         st.markdown(_sin_sangria(f"""
-        <div style="display:flex; align-items:center; justify-content:flex-start; height:100%; padding:8px 0; gap:10px;">
-            <img src="{LOGO_ESCUDO_URL}" style="width:100px; height:auto; flex-shrink:0;">
-            <img src="{LOGO_TEXTO_URL}" style="height:85px; width:auto;">
+        <div style="display:flex; align-items:center; justify-content:center; height:100%;">
+            <img src="{LOGO_ESCUDO_URL}" style="width:56px; height:auto;">
         </div>
         """), unsafe_allow_html=True)
 
     with col_menu:
-        fila1 = st.columns(2)
-        fila2 = st.columns(2)
-        for col, (clave, etiqueta) in zip(fila1 + fila2, _SECCIONES_NAV):
+        cols = st.columns(len(_SECCIONES_NAV))
+        for col, (clave, etiqueta) in zip(cols, _SECCIONES_NAV):
             with col:
                 es_activo = clave == activo
                 if st.button(
@@ -308,6 +328,13 @@ def barra_navegacion(activo: str):
                 ) and not es_activo:
                     st.session_state.pagina = clave
                     st.rerun()
+
+    with col_der:
+        st.markdown(_sin_sangria(f"""
+        <div style="display:flex; align-items:center; justify-content:center; height:100%;">
+            <img src="{LOGO_ESCUDO_URL}" style="width:56px; height:auto;">
+        </div>
+        """), unsafe_allow_html=True)
 
     st.markdown('<hr style="border-color:#26402F; margin-top:0;">', unsafe_allow_html=True)
 
