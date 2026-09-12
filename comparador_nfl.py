@@ -482,6 +482,52 @@ def obtener_noticias_nfl(limite: int = 10) -> list:
         return [{"error": str(e)}]
 
 
+def obtener_noticias_equipo(team_abbr: str, limite: int = 10) -> list:
+    """
+    Noticias específicas de un equipo. Intenta primero un endpoint de
+    ESPN por equipo (mismo patrón que el de lesiones por equipo, que sí
+    funciona) — si falla, no existe, o no trae nada, cae a filtrar las
+    noticias generales de la liga por el apodo del equipo.
+    """
+    # Intento 1: endpoint de noticias por equipo (no verificado en vivo,
+    # sigue el mismo patrón que /teams/{abbr}/injuries).
+    try:
+        url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{team_abbr}/news"
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        articulos = data.get("articles") or data.get("feed") or []
+
+        noticias = []
+        for art in articulos[:limite]:
+            imagen = None
+            imgs = art.get("images") or []
+            if imgs:
+                imagen = imgs[0].get("url")
+            noticias.append({
+                "titulo": art.get("headline", "?"),
+                "descripcion": art.get("description", ""),
+                "imagen": imagen,
+                "link": (art.get("links") or {}).get("web", {}).get("href", ""),
+                "fecha": art.get("published", ""),
+            })
+        if noticias:
+            return noticias
+    except Exception:
+        pass
+
+    # Respaldo: filtra las noticias generales de la liga por apodo del equipo.
+    apodo = _APODOS_NFL.get(team_abbr, team_abbr).lower()
+    generales = obtener_noticias_nfl(30)
+    if generales and "error" in generales[0]:
+        return []
+    filtradas = [
+        n for n in generales
+        if apodo in n.get("titulo", "").lower() or apodo in n.get("descripcion", "").lower()
+    ]
+    return filtradas[:limite]
+
+
 _EQUIPOS_LIGA = [
     "ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE", "DAL", "DEN",
     "DET", "GB", "HOU", "IND", "JAX", "KC", "LA", "LAC", "LV", "MIA",

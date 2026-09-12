@@ -32,6 +32,7 @@ from comparador_nfl import (
     obtener_clima_estadio,
     obtener_lineas_apuestas,
     obtener_noticias_nfl,
+    obtener_noticias_equipo,
     obtener_lesiones_liga,
     obtener_lesiones_liga_api_sports,
     obtener_standings,
@@ -469,6 +470,61 @@ def noticias_cacheadas(limite: int = 10):
 
 
 @st.cache_data(show_spinner=False, ttl=900)
+def noticias_equipo_cacheadas(team_abbr: str, limite: int = 10):
+    return obtener_noticias_equipo(team_abbr, limite)
+
+
+def renderizar_noticias(noticias: list):
+    """Grilla de 2 columnas: foto (clicable, tamaño parejo) arriba, nota
+    abajo — usado tanto en Noticias generales como por equipo."""
+    if noticias and "error" in noticias[0]:
+        st.info(f"No se pudieron cargar las noticias: {noticias[0]['error']}")
+    elif not noticias:
+        st.info("No hay noticias disponibles en este momento.")
+    else:
+        for i in range(0, len(noticias), 2):
+            par = noticias[i:i + 2]
+            cols = st.columns(2)
+            for col, n in zip(cols, par):
+                with col:
+                    with st.container(border=True):
+                        link = n.get("link", "")
+                        imagen_html = ""
+                        if n.get("imagen"):
+                            img_tag = (
+                                f'<img src="{n["imagen"]}" style="width:70%; aspect-ratio:16/10; '
+                                f'object-fit:cover; border-radius:6px; margin:0 auto 10px auto; display:block;">'
+                            )
+                            imagen_html = f'<a href="{link}">{img_tag}</a>' if link else img_tag
+
+                        st.markdown(_sin_sangria(f"""
+                        <div style="text-align:center;">
+                            {imagen_html}
+                            <p style="font-weight:700; margin:0 0 6px 0;">{n['titulo']}</p>
+                            <p style="color:#CDD1C7; font-size:0.9rem; margin:0 0 8px 0;">{n.get('descripcion', '')}</p>
+                            {f'<a href="{link}">Leer más</a>' if link else ''}
+                        </div>
+                        """), unsafe_allow_html=True)
+
+
+def grid_iconos_equipos():
+    """Iconos pequeños de los 32 equipos — clic en cualquiera lleva a
+    noticias específicas de ese equipo."""
+    st.caption("Noticias por equipo")
+    por_fila = 8
+    for i in range(0, len(EQUIPOS), por_fila):
+        fila = EQUIPOS[i:i + por_fila]
+        cols = st.columns(por_fila)
+        for col, abbr in zip(cols, fila):
+            with col:
+                st.image(logo_url(abbr), width=28)
+                if st.button(abbr, key=f"nav_noticias_{abbr}", use_container_width=True):
+                    st.session_state.equipo_noticias = abbr
+                    st.session_state.pagina = "noticias_equipo"
+                    st.rerun()
+
+
+@st.cache_data(show_spinner=False, ttl=900)
 def lesiones_liga_cacheadas(limite: int = 25, season: int = None, api_key: str = ""):
     """Usa API-Sports si hay key configurada (más confiable); si no, o si
     falla, cae de vuelta al scraping de ESPN equipo por equipo."""
@@ -632,38 +688,35 @@ if st.session_state.pagina == "inicio":
         '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#F2994A;">News</span>',
     )
 
+    grid_iconos_equipos()
+    st.divider()
+
     with st.spinner("Cargando noticias..."):
         noticias = noticias_cacheadas()
+    renderizar_noticias(noticias)
 
-    if noticias and "error" in noticias[0]:
-        st.info(f"No se pudieron cargar las noticias: {noticias[0]['error']}")
-    elif not noticias:
-        st.info("No hay noticias disponibles en este momento.")
-    else:
-        # Dos columnas: foto (clicable, tamaño parejo) arriba, nota abajo.
-        for i in range(0, len(noticias), 2):
-            par = noticias[i:i + 2]
-            cols = st.columns(2)
-            for col, n in zip(cols, par):
-                with col:
-                    with st.container(border=True):
-                        link = n.get("link", "")
-                        imagen_html = ""
-                        if n.get("imagen"):
-                            img_tag = (
-                                f'<img src="{n["imagen"]}" style="width:70%; aspect-ratio:16/10; '
-                                f'object-fit:cover; border-radius:6px; margin:0 auto 10px auto; display:block;">'
-                            )
-                            imagen_html = f'<a href="{link}">{img_tag}</a>' if link else img_tag
+    st.stop()
 
-                        st.markdown(_sin_sangria(f"""
-                        <div style="text-align:center;">
-                            {imagen_html}
-                            <p style="font-weight:700; margin:0 0 6px 0;">{n['titulo']}</p>
-                            <p style="color:#CDD1C7; font-size:0.9rem; margin:0 0 8px 0;">{n.get('descripcion', '')}</p>
-                            {f'<a href="{link}">Leer más</a>' if link else ''}
-                        </div>
-                        """), unsafe_allow_html=True)
+
+# ============================================================
+# PANTALLA: NOTICIAS POR EQUIPO (sub-pantalla de Noticias)
+# ============================================================
+if st.session_state.pagina == "noticias_equipo":
+    encabezado_sitio("inicio")
+    equipo_sel = st.session_state.get("equipo_noticias", "KC")
+
+    if st.button("← Volver a Noticias"):
+        st.session_state.pagina = "inicio"
+        st.rerun()
+
+    hero(
+        f'<span style="color:#F1F4F9;">{NOMBRES_EQUIPO.get(equipo_sel, equipo_sel)}</span> '
+        f'<span style="color:#F2994A;">News</span>',
+    )
+
+    with st.spinner("Cargando noticias..."):
+        noticias_eq = noticias_equipo_cacheadas(equipo_sel)
+    renderizar_noticias(noticias_eq)
 
     st.stop()
 
