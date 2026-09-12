@@ -87,19 +87,19 @@ def inyectar_estilos():
 
     /* Botón primario: acento dorado único */
     [data-testid="stButton"] button[kind="primary"] {
-        background: #FFB627;
-        color: #0B0F1A;
+        background: #FF6B4A;
+        color: #0D2B2E;
         border: none;
         font-weight: 600;
         border-radius: 6px;
     }
     [data-testid="stButton"] button[kind="primary"]:hover {
-        background: #FFC659;
-        color: #0B0F1A;
+        background: #FF8A6B;
+        color: #0D2B2E;
     }
     [data-testid="stButton"] button:not([kind="primary"]) {
         border-radius: 6px;
-        border: 1px solid #2A3348;
+        border: 1px solid #1D4145;
     }
 
     /* Métricas con el tono condensado del marcador */
@@ -107,21 +107,21 @@ def inyectar_estilos():
         font-family: 'Barlow Condensed', sans-serif;
         font-weight: 700;
     }
-    [data-testid="stMetricLabel"] { color: #8B96AC; }
+    [data-testid="stMetricLabel"] { color: #8FA9A5; }
 
     /* Tabs: subrayado dorado en la pestaña activa */
     [data-testid="stTabs"] button[aria-selected="true"] {
-        color: #FFB627 !important;
-        border-bottom-color: #FFB627 !important;
+        color: #FF6B4A !important;
+        border-bottom-color: #FF6B4A !important;
     }
 
     /* Barra de progreso (probabilidad) en dorado */
     [data-testid="stProgress"] > div > div > div {
-        background-color: #FFB627 !important;
+        background-color: #FF6B4A !important;
     }
 
     /* Sidebar con borde sutil */
-    [data-testid="stSidebar"] { border-right: 1px solid #2A3348; }
+    [data-testid="stSidebar"] { border-right: 1px solid #1D4145; }
 
     /* Franja de "campo cortado" — línea de yarda diagonal repetida */
     .franja-campo {
@@ -129,7 +129,7 @@ def inyectar_estilos():
         background: repeating-linear-gradient(
             -45deg, #1F6B3A, #1F6B3A 10px, #2A8449 10px, #2A8449 20px
         );
-        border-bottom: 2px solid #FFB627;
+        border-bottom: 2px solid #FF6B4A;
         margin: -1rem -1rem 1rem -1rem;
     }
 
@@ -139,14 +139,14 @@ def inyectar_estilos():
         margin-bottom: 12px; scrollbar-width: thin;
     }
     .ticker-juego {
-        flex: 0 0 auto; background: #152340; border: 1px solid #223255;
+        flex: 0 0 auto; background: #123539; border: 1px solid #1D4145;
         border-radius: 6px; padding: 8px 14px; min-width: 130px;
     }
     .ticker-equipo { display:flex; align-items:center; justify-content:space-between; gap:8px; }
     .ticker-equipo img { width:20px; height:20px; }
     .ticker-abbr { font-weight:700; font-size:0.85rem; color:#F1F4F9; }
-    .ticker-score { font-weight:700; font-size:0.85rem; color:#FFB627; }
-    .ticker-estado { font-size:0.7rem; color:#8B96AC; text-align:center; margin-top:4px; }
+    .ticker-score { font-weight:700; font-size:0.85rem; color:#FF6B4A; }
+    .ticker-estado { font-size:0.7rem; color:#8FA9A5; text-align:center; margin-top:4px; }
     </style>
     """), unsafe_allow_html=True)
 
@@ -185,9 +185,9 @@ def hero(titulo: str, subtitulo: str = ""):
     """Encabezado con el mismo tono condensado en toda la app, con una
     barra de acento — más deliberado que un st.title suelto."""
     st.markdown(_sin_sangria(f"""
-    <div style="border-left: 4px solid #FFB627; padding-left: 16px; margin-bottom: 8px;">
+    <div style="border-left: 4px solid #FF6B4A; padding-left: 16px; margin-bottom: 8px;">
         <h1 style="margin: 0; font-size: 2.4rem;">{titulo}</h1>
-        {f'<p style="color: #8B96AC; margin-top: 4px;">{subtitulo}</p>' if subtitulo else ''}
+        {f'<p style="color: #8FA9A5; margin-top: 4px;">{subtitulo}</p>' if subtitulo else ''}
     </div>
     """), unsafe_allow_html=True)
 
@@ -198,9 +198,9 @@ def _escudo_svg(tamano: int = 40) -> str:
     sin usar marcas registradas de terceros."""
     return f"""<svg width="{tamano}" height="{int(tamano*1.1)}" viewBox="0 0 44 48" xmlns="http://www.w3.org/2000/svg">
         <path d="M22 2 L42 9 L42 22 C42 34 33 43 22 46 C11 43 2 34 2 22 L2 9 Z"
-              fill="#152340" stroke="#FFB627" stroke-width="2.5"/>
+              fill="#123539" stroke="#FF6B4A" stroke-width="2.5"/>
         <text x="22" y="33" font-family="'Barlow Condensed', sans-serif" font-weight="700"
-              font-size="24" fill="#FFB627" text-anchor="middle">W</text>
+              font-size="24" fill="#FF6B4A" text-anchor="middle">W</text>
     </svg>"""
 
 
@@ -212,9 +212,9 @@ def marca_completa():
         {_escudo_svg(52)}
         <div>
             <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:2.1rem; line-height:1; letter-spacing:0.01em;">
-                <span style="color:#F1F4F9;">NFL</span> <span style="color:#FFB627;">WARRIORS</span>
+                <span style="color:#F1F4F9;">NFL</span> <span style="color:#FF6B4A;">WARRIORS</span>
             </div>
-            <div style="color:#8B96AC; font-size:0.95rem; margin-top:2px;">Pronósticos con lógica, no con corazonadas.</div>
+            <div style="color:#8FA9A5; font-size:0.95rem; margin-top:2px;">Pronósticos con lógica, no con corazonadas.</div>
         </div>
     </div>
     """), unsafe_allow_html=True)
@@ -226,10 +226,10 @@ def marca_compacta():
     parte del menú principal."""
     st.markdown(_sin_sangria(f"""
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;
-                padding-bottom:12px; border-bottom:1px solid #223255;">
+                padding-bottom:12px; border-bottom:1px solid #1D4145;">
         {_escudo_svg(28)}
         <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem; letter-spacing:0.01em;">
-            <span style="color:#F1F4F9;">NFL</span> <span style="color:#FFB627;">WARRIORS</span>
+            <span style="color:#F1F4F9;">NFL</span> <span style="color:#FF6B4A;">WARRIORS</span>
         </div>
     </div>
     """), unsafe_allow_html=True)
@@ -259,7 +259,7 @@ def barra_navegacion(activo: str):
         <div class="nav-marca">
             {_escudo_svg(30)}
             <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.25rem;">
-                <span style="color:#F1F4F9;">NFL</span> <span style="color:#FFB627;">WARRIORS</span>
+                <span style="color:#F1F4F9;">NFL</span> <span style="color:#FF6B4A;">WARRIORS</span>
             </div>
         </div>
         """), unsafe_allow_html=True)
@@ -277,7 +277,7 @@ def barra_navegacion(activo: str):
                     st.session_state.pagina = clave
                     st.rerun()
 
-    st.markdown('<hr style="border-color:#223255; margin-top:0;">', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:#1D4145; margin-top:0;">', unsafe_allow_html=True)
 
 
 def encabezado_sitio(activo: str):
@@ -337,12 +337,12 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         pct_txt = "-" if row["V"] == 0 else f"{pct:.3f}".lstrip("0")
         filas_html += f"""
         <tr>
-            <td style="padding:6px 6px; background:#0E1B33;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
-            <td style="padding:8px 10px; font-weight:700; color:#F5F7FA; white-space:nowrap; background:#0E1B33; font-size:1rem;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#0E1B33; white-space:nowrap;">{row['V']}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#0E1B33; white-space:nowrap;">{row['D']}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#0E1B33; white-space:nowrap;">{row['E']}</td>
-            <td style="text-align:center; color:#E4E8EF; font-weight:600; background:#0E1B33; white-space:nowrap;">{pct_txt}</td>
+            <td style="padding:6px 6px; background:#0D2B2E;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
+            <td style="padding:8px 10px; font-weight:700; color:#F5F7FA; white-space:nowrap; background:#0D2B2E; font-size:1rem;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#0D2B2E; white-space:nowrap;">{row['V']}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#0D2B2E; white-space:nowrap;">{row['D']}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#0D2B2E; white-space:nowrap;">{row['E']}</td>
+            <td style="text-align:center; color:#E4E8EF; font-weight:600; background:#0D2B2E; white-space:nowrap;">{pct_txt}</td>
         </tr>"""
 
     return _sin_sangria(f"""
@@ -737,9 +737,9 @@ if st.session_state.pagina == "fantasy":
 encabezado_sitio("pronosticos")
 hero("Comparador de equipos", "Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.")
 
-# --- Barra lateral: pesos del modelo (compartidos por las tres pestañas) ---
-with st.sidebar:
-    st.header("Datos históricos")
+# --- Ajustes del modelo: desplegable, solo visible en esta sección (no en el sidebar global) ---
+with st.expander("⚙️ Ajustes del modelo (temporadas históricas y pesos)"):
+    st.subheader("Datos históricos")
     temporadas_historicas = st.slider(
         "Temporadas pasadas a combinar con la actual", 0, 4, 2,
         help="0 = usar solo la temporada seleccionada. 2 = combina esa temporada "
@@ -749,10 +749,12 @@ with st.sidebar:
     )
 
     st.divider()
-    st.header("Ajustar pesos del modelo")
+    st.subheader("Ajustar pesos del modelo")
     pesos_editados = {}
-    for categoria, valor in WEIGHTS.items():
-        pesos_editados[categoria] = st.slider(categoria, 0, 5, valor)
+    cols_pesos = st.columns(2)
+    for i, (categoria, valor) in enumerate(WEIGHTS.items()):
+        with cols_pesos[i % 2]:
+            pesos_editados[categoria] = st.slider(categoria, 0, 5, valor)
     WEIGHTS.update(pesos_editados)
 
     st.divider()
