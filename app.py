@@ -52,7 +52,7 @@ try:
 except Exception:
     API_SPORTS_KEY = ""
 
-st.set_page_config(page_title="Comparador NFL", page_icon="🏈", layout="wide")
+st.set_page_config(page_title="NFLWarriors", page_icon="🛡️", layout="wide")
 
 
 def _sin_sangria(html: str) -> str:
@@ -135,6 +135,49 @@ def hero(titulo: str, subtitulo: str = ""):
     """), unsafe_allow_html=True)
 
 
+def _escudo_svg(tamano: int = 40) -> str:
+    """Escudo con 'W' — diseño geométrico original propio (no es el logo
+    de la NFL ni de ningún equipo), para que la marca sea de NFLWarriors
+    sin usar marcas registradas de terceros."""
+    return f"""<svg width="{tamano}" height="{int(tamano*1.1)}" viewBox="0 0 44 48" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22 2 L42 9 L42 22 C42 34 33 43 22 46 C11 43 2 34 2 22 L2 9 Z"
+              fill="#152340" stroke="#FFB627" stroke-width="2.5"/>
+        <text x="22" y="33" font-family="'Barlow Condensed', sans-serif" font-weight="700"
+              font-size="24" fill="#FFB627" text-anchor="middle">W</text>
+    </svg>"""
+
+
+def marca_completa():
+    """Lockup completo de la marca — logo + wordmark + tagline. Se usa una
+    sola vez, en la pantalla de Inicio."""
+    st.markdown(_sin_sangria(f"""
+    <div style="display:flex; align-items:center; gap:14px; margin-bottom:4px;">
+        {_escudo_svg(52)}
+        <div>
+            <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:2.1rem; line-height:1; letter-spacing:0.01em;">
+                <span style="color:#F1F4F9;">NFL</span> <span style="color:#FFB627;">WARRIORS</span>
+            </div>
+            <div style="color:#8B96AC; font-size:0.95rem; margin-top:2px;">Pronósticos con lógica, no con corazonadas.</div>
+        </div>
+    </div>
+    """), unsafe_allow_html=True)
+
+
+def marca_compacta():
+    """Barra de marca angosta — logo + wordmark, sin tagline. Se usa en el
+    resto de las pantallas para mantener la identidad consistente sin
+    repetir el lockup completo en cada una."""
+    st.markdown(_sin_sangria(f"""
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;
+                padding-bottom:12px; border-bottom:1px solid #223255;">
+        {_escudo_svg(28)}
+        <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem; letter-spacing:0.01em;">
+            <span style="color:#F1F4F9;">NFL</span> <span style="color:#FFB627;">WARRIORS</span>
+        </div>
+    </div>
+    """), unsafe_allow_html=True)
+
+
 inyectar_estilos()
 
 EQUIPOS = [
@@ -181,28 +224,28 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         pct_txt = "-" if row["V"] == 0 else f"{pct:.3f}".lstrip("0")
         filas_html += f"""
         <tr>
-            <td style="padding:6px 6px; width:30px; background:#0E1B33;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
+            <td style="padding:6px 6px; background:#0E1B33;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
             <td style="padding:8px 10px; font-weight:700; color:#F5F7FA; white-space:nowrap; background:#0E1B33; font-size:1rem;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#0E1B33;">{row['V']}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#0E1B33;">{row['D']}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#0E1B33;">{row['E']}</td>
-            <td style="text-align:center; color:#E4E8EF; font-weight:600; background:#0E1B33;">{pct_txt}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#0E1B33; white-space:nowrap;">{row['V']}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#0E1B33; white-space:nowrap;">{row['D']}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#0E1B33; white-space:nowrap;">{row['E']}</td>
+            <td style="text-align:center; color:#E4E8EF; font-weight:600; background:#0E1B33; white-space:nowrap;">{pct_txt}</td>
         </tr>"""
 
     return _sin_sangria(f"""
-    <div style="border:3px solid {color_borde}; border-radius:4px; overflow:hidden; margin-bottom:20px; min-width:340px;">
+    <div style="border:3px solid {color_borde}; border-radius:4px; overflow:hidden; margin-bottom:20px; min-width:420px;">
     <table style="width:100%; border-collapse:collapse; font-family:'Inter',sans-serif; table-layout:fixed;">
         <colgroup>
-            <col style="width:38px;"><col><col style="width:36px;">
-            <col style="width:36px;"><col style="width:36px;"><col style="width:54px;">
+            <col style="width:42px;"><col><col style="width:46px;">
+            <col style="width:46px;"><col style="width:46px;"><col style="width:72px;">
         </colgroup>
         <tr style="background:{color_header};">
-            <td colspan="2" style="padding:8px 10px; color:white; font-weight:700;
+            <td colspan="2" style="padding:8px 10px; color:white; font-weight:700; white-space:nowrap;
                 font-family:'Barlow Condensed',sans-serif; font-size:1.1rem;">{nombre_division}</td>
-            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem;">G</td>
-            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem;">P</td>
-            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem;">E</td>
-            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem;">.PCT</td>
+            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">G</td>
+            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">P</td>
+            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">E</td>
+            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">.PCT</td>
         </tr>
         {filas_html}
     </table>
@@ -388,7 +431,9 @@ if not NFL_DATA_PY_OK:
 # PANTALLA: INICIO — solo noticias y lesiones recientes de la liga
 # ============================================================
 if st.session_state.pagina == "inicio":
-    hero("🏈 NFL — Noticias", "Lo último de la liga, antes de ver los pronósticos.")
+    marca_completa()
+    st.divider()
+    hero("Noticias", "Lo último de la liga, antes de ver los pronósticos.")
 
     if st.button("🔮 Ver pronósticos", type="primary", use_container_width=True):
         st.session_state.pagina = "pronosticos"
@@ -450,7 +495,8 @@ if st.session_state.pagina == "estadisticas":
         st.session_state.pagina = "inicio"
         st.rerun()
 
-    hero("📊 Tabla de posiciones")
+    marca_compacta()
+    hero("Tabla de posiciones")
     season_standings = st.number_input(
         "Temporada", min_value=2015, max_value=2027,
         value=datetime.date.today().year, key="season_standings",
@@ -464,18 +510,26 @@ if st.session_state.pagina == "estadisticas":
                 if API_SPORTS_KEY and "PF" in standings.columns:
                     st.caption("📡 Datos oficiales en tiempo real vía API-Sports")
 
+                # Si subes tu propio archivo de logo (con derecho de uso) a la
+                # carpeta del repo, pon aquí la ruta o URL y se muestra al
+                # centro entre AFC y NFC. Vacío = no se muestra nada ahí.
+                LOGO_CENTRAL_URL = ""
+
                 st.markdown(_sin_sangria("""
                 <style>
                 .banda-conf { padding: 12px; text-align: center;
                     font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
                     font-size: 1.5rem; color: white; margin-bottom: 10px; }
                 .emblema-nfl { position: sticky; top: 40%; text-align: center; }
-                .emblema-nfl span { display:inline-block; font-size: 2.6rem; transform: rotate(-20deg);
-                    background: radial-gradient(circle, #1C2B4A 60%, transparent 62%); padding: 14px; border-radius: 50%; }
+                .emblema-nfl img { max-width: 100%; }
                 </style>
                 """), unsafe_allow_html=True)
 
-                col_afc, col_centro, col_nfc = st.columns([5, 1, 5])
+                if LOGO_CENTRAL_URL:
+                    col_afc, col_centro, col_nfc = st.columns([5, 1, 5])
+                else:
+                    col_afc, col_nfc = st.columns(2)
+                    col_centro = None
 
                 with col_afc:
                     st.markdown('<div class="banda-conf" style="background:#C8102E;">AFC Football Conference</div>', unsafe_allow_html=True)
@@ -484,8 +538,9 @@ if st.session_state.pagina == "estadisticas":
                         filas = afc_df[afc_df["División"] == div].sort_values("% Victorias", ascending=False)
                         st.markdown(tabla_division_html(div, filas, "#DB8F6E", "#C8102E"), unsafe_allow_html=True)
 
-                with col_centro:
-                    st.markdown('<div class="emblema-nfl"><span>🏈</span></div>', unsafe_allow_html=True)
+                if col_centro is not None:
+                    with col_centro:
+                        st.markdown(f'<div class="emblema-nfl"><img src="{LOGO_CENTRAL_URL}"></div>', unsafe_allow_html=True)
 
                 with col_nfc:
                     st.markdown('<div class="banda-conf" style="background:#1D4E8F;">NFC Football Conference</div>', unsafe_allow_html=True)
@@ -514,7 +569,8 @@ if st.session_state.pagina == "detalle":
         st.stop()
 
     away, home, season, temp_hist = ctx["away"], ctx["home"], ctx["season"], ctx["temporadas_historicas"]
-    hero(f"🔍 {nombre_equipo(away)} @ {nombre_equipo(home)}")
+    marca_compacta()
+    hero(f"{nombre_equipo(away)} @ {nombre_equipo(home)}")
 
     with st.spinner("Cargando detalle..."):
         try:
@@ -541,7 +597,8 @@ if st.button("← Volver a inicio"):
     st.session_state.pagina = "inicio"
     st.rerun()
 
-hero("🏈 Comparador de equipos NFL", "Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.")
+marca_compacta()
+hero("Comparador de equipos", "Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.")
 
 # --- Barra lateral: pesos del modelo (compartidos por las tres pestañas) ---
 with st.sidebar:
