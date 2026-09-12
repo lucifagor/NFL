@@ -26,6 +26,7 @@ from comparador_nfl import (
     obtener_stats_temporada,
     obtener_stats_combinadas,
     obtener_jugadores_clave,
+    obtener_lideres_estadisticos,
     combinar_stats_con_jugadores,
     obtener_calendario_semana,
     obtener_proximos_partidos,
@@ -172,8 +173,8 @@ def inyectar_estilos():
        toda la tarjeta es clicable (botón invisible cubre todo encima). */
     div[class*="st-key-equipo_cell_"] {
         position: relative;
-        background: #FFFFFF; border: 1px solid #AEB4A9; border-radius: 8px;
-        padding: 10px 2px 8px 2px; text-align: center;
+        background: #D8DBD4; border: 1px solid #AEB4A9; border-radius: 8px;
+        padding: 5px 1px 4px 1px; text-align: center;
         box-shadow: 0 3px 0 #8B9187, 0 5px 8px rgba(0,0,0,0.3);
         margin-bottom: 4px;
         overflow: hidden;
@@ -194,7 +195,7 @@ def inyectar_estilos():
        lenguaje visual que las tarjetas de equipo, para que se lea bien
        sobre el fondo con imagen). */
     .noticia-card {
-        background: #FFFFFF; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+        background: #D8DBD4; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.35);
         padding: 14px; text-align: center; margin-bottom: 12px;
     }
     .noticia-card p { color: #14241A; }
@@ -521,6 +522,16 @@ def roster_equipo_cacheado(team_abbr: str, season: int):
     return obtener_roster_equipo(team_abbr, season)
 
 
+@st.cache_data(show_spinner=False, ttl=1800)
+def jugadores_clave_cacheados(season: int):
+    return obtener_jugadores_clave(season)
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def lideres_estadisticos_cacheados(season: int, top_n: int = 10):
+    return obtener_lideres_estadisticos(season, top_n)
+
+
 def lista_equipos_sidebar():
     """Equipos agrupados por división — el nombre de la división arriba
     de cada grupo de 4, y cada equipo como una tarjeta blanca clicable
@@ -529,7 +540,7 @@ def lista_equipos_sidebar():
     equipo (calendario, roster, standing)."""
     st.markdown(_sin_sangria("""
     <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-       font-size:1.3rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
+       font-size:2.6rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
        text-align:center;">EQUIPOS</p>
     """), unsafe_allow_html=True)
 
@@ -558,8 +569,8 @@ def lista_equipos_sidebar():
                 with st.container(key=f"equipo_cell_{abbr}"):
                     st.markdown(_sin_sangria(f"""
                     <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                        <img src="{logo_url(abbr)}" style="width:82px; height:auto; display:block; margin:0 auto 6px auto;">
-                        <span style="font-weight:700; color:#14241A; font-size:0.85rem;">{abbr}</span>
+                        <img src="{logo_url(abbr)}" style="width:41px; height:auto; display:block; margin:0 auto 4px auto;">
+                        <span style="font-weight:700; color:#14241A; font-size:0.7rem;">{abbr}</span>
                     </div>
                     """), unsafe_allow_html=True)
                     if st.button(" ", key=f"lista_equipo_{abbr}", use_container_width=True):
@@ -775,8 +786,6 @@ if st.session_state.pagina == "inicio":
     with st.spinner("Cargando noticias..."):
         noticias = noticias_cacheadas(20)
 
-    st.caption(f"🔧 Diagnóstico temporal: ESPN devolvió {len(noticias)} noticias.")
-
     principales = noticias[:6] if not (noticias and "error" in noticias[0]) else noticias
     pasadas = noticias[6:20] if not (noticias and "error" in noticias[0]) else []
 
@@ -792,21 +801,20 @@ if st.session_state.pagina == "inicio":
         filas_html = ""
         for n in pasadas:
             link = n.get("link", "")
-            titulo_html = f'<a href="{link}" style="color:#BD4E1E; text-decoration:none;">{n["titulo"]}</a>' if link else n["titulo"]
+            titulo_html = f'<a href="{link}" style="color:#F1F4F9; text-decoration:none;">{n["titulo"]}</a>' if link else n["titulo"]
             fuente_txt = n.get("fuente", "")
             filas_html += f"""
-            <div style="background:#FFFFFF; border-radius:8px; box-shadow:0 3px 6px rgba(0,0,0,0.3);
-                 padding:10px 12px; margin-bottom:8px; display:flex; align-items:flex-start; gap:8px;">
+            <div style="padding:10px 0; border-bottom:1px solid #1C3324; display:flex; align-items:flex-start; gap:8px;">
                 <span style="font-size:0.9rem; line-height:1.4;">🏈</span>
-                <span style="font-size:0.88rem; line-height:1.4; color:#14241A; font-weight:600;">{titulo_html}
-                    <span style="display:block; color:#7A7A7A; font-size:0.7rem; text-transform:uppercase; font-weight:400;">{fuente_txt}</span>
+                <span style="font-size:0.88rem; line-height:1.4; color:#F1F4F9; font-weight:600;">{titulo_html}
+                    <span style="display:block; color:#8FA398; font-size:0.7rem; text-transform:uppercase; font-weight:400;">{fuente_txt}</span>
                 </span>
             </div>"""
 
         st.markdown(_sin_sangria(f"""
         <div>
             <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-               font-size:1.1rem; color:#E8ECE9; letter-spacing:0.03em; margin:0 0 10px 0;
+               font-size:2.6rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
                text-align:center;">NOTICIAS</p>
             {filas_html}
         </div>
@@ -994,12 +1002,69 @@ if st.session_state.pagina == "detalle":
 # ============================================================
 if st.session_state.pagina == "fantasy":
     encabezado_sitio("fantasy")
-    hero("Fantasy", "Próximamente.")
-    st.info(
-        "Todavía no hay nada armado aquí — dime qué te gustaría ver "
-        "(ligas, draft, waiver wire, proyecciones semanales, tu roster, etc.) "
-        "y lo construimos."
+    hero(
+        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#BD4E1E;">Fantasy</span>',
+        "Jugadores destacados de la temporada — por equipo y por posición.",
     )
+
+    season_fantasy = datetime.date.today().year
+
+    tab_equipo, tab_posicion = st.tabs(["🏟️ Por equipo", "⭐ Por posición"])
+
+    with tab_equipo:
+        st.caption(
+            "El 'titular' de cada equipo se define como el jugador con más producción "
+            "acumulada en su especialidad (pase para QB, carrera para RB, recepción para WR/TE) — "
+            "no usa datos oficiales de lesiones, así que puede no reflejar al titular actual real."
+        )
+        with st.spinner("Cargando jugadores clave..."):
+            try:
+                jugadores_eq = jugadores_clave_cacheados(season_fantasy)
+            except Exception as e:
+                jugadores_eq = None
+                st.info(f"No se pudieron cargar los jugadores por equipo: {e}")
+
+        if jugadores_eq is not None and not jugadores_eq.empty:
+            for _, fila in jugadores_eq.iterrows():
+                with st.container(border=True):
+                    col_logo, col_datos = st.columns([1, 5])
+                    with col_logo:
+                        st.image(logo_url(fila["team"]), width=44)
+                        st.markdown(f"**{NOMBRES_EQUIPO.get(fila['team'], fila['team'])}**")
+                    with col_datos:
+                        cols_pos = st.columns(4)
+                        etiquetas = [
+                            ("QB1", "qb1_nombre", "qb1_yardas_pase_pg", "yd/partido"),
+                            ("RB1", "rb1_nombre", "rb1_yardas_carrera_pg", "yd/partido"),
+                            ("WR1", "wr1_nombre", "wr1_yardas_recepcion_pg", "yd/partido"),
+                            ("TE1", "te1_nombre", "te1_yardas_recepcion_pg", "yd/partido"),
+                        ]
+                        for col, (pos, campo_nombre, campo_valor, unidad) in zip(cols_pos, etiquetas):
+                            with col:
+                                nombre_j = fila.get(campo_nombre) or "—"
+                                valor_j = fila.get(campo_valor, 0)
+                                st.metric(pos, nombre_j, f"{valor_j:.1f} {unidad}" if nombre_j != "—" else "")
+
+    with tab_posicion:
+        with st.spinner("Cargando líderes por posición..."):
+            try:
+                lideres = lideres_estadisticos_cacheados(season_fantasy, 10)
+            except Exception as e:
+                lideres = None
+                st.info(f"No se pudieron cargar los líderes por posición: {e}")
+
+        if lideres is not None:
+            col_pase, col_carrera, col_recepcion = st.columns(3)
+            with col_pase:
+                st.markdown("**🏈 Mejores QB (yardas de pase)**")
+                st.dataframe(lideres["pase"], use_container_width=True, hide_index=True)
+            with col_carrera:
+                st.markdown("**🏃 Mejores RB (yardas de carrera)**")
+                st.dataframe(lideres["carrera"], use_container_width=True, hide_index=True)
+            with col_recepcion:
+                st.markdown("**🙌 Mejores WR/TE (yardas de recepción)**")
+                st.dataframe(lideres["recepcion"], use_container_width=True, hide_index=True)
+
     st.stop()
 
 
