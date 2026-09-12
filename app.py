@@ -55,11 +55,18 @@ except Exception:
 st.set_page_config(page_title="Comparador NFL", page_icon="🏈", layout="centered")
 
 
+def _sin_sangria(html: str) -> str:
+    """Streamlit/markdown puede interpretar líneas con 4+ espacios de
+    sangría como bloque de código en vez de HTML — quita la sangría de
+    cada línea para que siempre se renderice como HTML real."""
+    return "\n".join(line.strip() for line in html.strip().split("\n"))
+
+
 def inyectar_estilos():
     """Capa visual del sitio — tipografía condensada tipo marcador de
     estadio para títulos, Inter para el resto, acento dorado único
     (evita el look genérico de plantilla)."""
-    st.markdown("""
+    st.markdown(_sin_sangria("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap');
 
@@ -114,18 +121,18 @@ def inyectar_estilos():
     /* Sidebar con borde sutil */
     [data-testid="stSidebar"] { border-right: 1px solid #2A3348; }
     </style>
-    """, unsafe_allow_html=True)
+    """), unsafe_allow_html=True)
 
 
 def hero(titulo: str, subtitulo: str = ""):
     """Encabezado con el mismo tono condensado en toda la app, con una
     barra de acento — más deliberado que un st.title suelto."""
-    st.markdown(f"""
+    st.markdown(_sin_sangria(f"""
     <div style="border-left: 4px solid #FFB627; padding-left: 16px; margin-bottom: 8px;">
         <h1 style="margin: 0; font-size: 2.4rem;">{titulo}</h1>
         {f'<p style="color: #8B96AC; margin-top: 4px;">{subtitulo}</p>' if subtitulo else ''}
     </div>
-    """, unsafe_allow_html=True)
+    """), unsafe_allow_html=True)
 
 
 inyectar_estilos()
@@ -181,7 +188,7 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color: str) -
             <td style="text-align:center; color:#C7CEDA; font-weight:600;">{pct_txt}</td>
         </tr>"""
 
-    return f"""
+    return _sin_sangria(f"""
     <table style="width:100%; border-collapse:collapse; margin-bottom:16px;
                    font-family:'Inter',sans-serif; background:#141B2B;
                    border-radius:8px; overflow:hidden; border:1px solid #1C2333;">
@@ -195,7 +202,7 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color: str) -
         </tr>
         {filas_html}
     </table>
-    """
+    """)
 
 
 def avisar_temporadas_faltantes(stats: pd.DataFrame):
@@ -454,13 +461,13 @@ if st.session_state.pagina == "estadisticas":
 
                 col_afc, col_nfc = st.columns(2)
 
-                st.markdown("""
+                st.markdown(_sin_sangria("""
                 <style>
                 .banda-conf { padding: 10px; border-radius: 6px; text-align: center;
                     font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
                     font-size: 1.3rem; color: white; margin-bottom: 8px; }
                 </style>
-                """, unsafe_allow_html=True)
+                """), unsafe_allow_html=True)
 
                 with col_afc:
                     st.markdown('<div class="banda-conf" style="background:#C8102E;">AFC</div>', unsafe_allow_html=True)
