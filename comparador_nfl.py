@@ -460,7 +460,7 @@ def obtener_noticias_nfl(limite: int = 10) -> list:
     """Devuelve las noticias más recientes de la NFL (titular, resumen,
     imagen y liga al artículo completo) — no separadas por equipo."""
     try:
-        r = requests.get(ESPN_NEWS_URL, timeout=15)
+        r = requests.get(ESPN_NEWS_URL, params={"limit": limite}, timeout=15)
         r.raise_for_status()
         data = r.json()
 

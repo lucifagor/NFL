@@ -101,14 +101,14 @@ def inyectar_estilos():
 
     /* Botón primario: acento dorado único */
     [data-testid="stButton"] button[kind="primary"] {
-        background: #F2994A;
+        background: #BD4E1E;
         color: #14241A;
         border: none;
         font-weight: 600;
         border-radius: 6px;
     }
     [data-testid="stButton"] button[kind="primary"]:hover {
-        background: #F5AD6E;
+        background: #D9683A;
         color: #14241A;
     }
     [data-testid="stButton"] button:not([kind="primary"]) {
@@ -125,13 +125,13 @@ def inyectar_estilos():
 
     /* Tabs: subrayado dorado en la pestaña activa */
     [data-testid="stTabs"] button[aria-selected="true"] {
-        color: #F2994A !important;
-        border-bottom-color: #F2994A !important;
+        color: #BD4E1E !important;
+        border-bottom-color: #BD4E1E !important;
     }
 
     /* Barra de progreso (probabilidad) en dorado */
     [data-testid="stProgress"] > div > div > div {
-        background-color: #F2994A !important;
+        background-color: #BD4E1E !important;
     }
 
     /* Sidebar con borde sutil */
@@ -140,7 +140,7 @@ def inyectar_estilos():
     /* Banner ilustrado tipo estadio (graderías + campo + postes) */
     .franja-campo {
         margin: -1rem -1rem 1rem -1rem;
-        border-bottom: 2px solid #F2994A;
+        border-bottom: 2px solid #BD4E1E;
         position: relative;
         overflow: hidden;
         line-height: 0;
@@ -240,9 +240,9 @@ def hero(titulo: str, subtitulo: str = ""):
     st.markdown(_sin_sangria(f"""
     <div style="text-align:center; margin: 0 0 10px 0;">
         <div style="display:flex; align-items:center; justify-content:center; gap:18px;">
-            <span style="flex:1; max-width:110px; height:3px; background:#F2994A; border-radius:2px;"></span>
+            <span style="flex:1; max-width:110px; height:3px; background:#BD4E1E; border-radius:2px;"></span>
             <h1 style="margin:0; font-size:3.1rem; white-space:nowrap;">{titulo}</h1>
-            <span style="flex:1; max-width:110px; height:3px; background:#F2994A; border-radius:2px;"></span>
+            <span style="flex:1; max-width:110px; height:3px; background:#BD4E1E; border-radius:2px;"></span>
         </div>
         {f'<p style="color: #9CB3A3; margin-top: 4px;">{subtitulo}</p>' if subtitulo else ''}
     </div>
@@ -274,7 +274,7 @@ def marca_completa():
         {_escudo_svg(52)}
         <div>
             <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:2.1rem; line-height:1; letter-spacing:0.01em;">
-                <span style="color:#F1F4F9;">NFL</span> <span style="color:#F2994A;">WARRIORS</span>
+                <span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">WARRIORS</span>
             </div>
             <div style="color:#9CB3A3; font-size:0.95rem; margin-top:2px;">Pronósticos con lógica, no con corazonadas.</div>
         </div>
@@ -291,7 +291,7 @@ def marca_compacta():
                 padding-bottom:12px; border-bottom:1px solid #26402F;">
         {_escudo_svg(28)}
         <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem; letter-spacing:0.01em;">
-            <span style="color:#F1F4F9;">NFL</span> <span style="color:#F2994A;">WARRIORS</span>
+            <span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">WARRIORS</span>
         </div>
     </div>
     """), unsafe_allow_html=True)
@@ -674,7 +674,7 @@ if st.session_state.pagina == "inicio":
     encabezado_sitio("inicio")
 
     hero(
-        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#F2994A;">News</span>',
+        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#BD4E1E;">News</span>',
     )
 
     with st.spinner("Cargando noticias..."):
@@ -695,15 +695,15 @@ if st.session_state.pagina == "inicio":
             titulo_html = f'<a href="{link}" style="color:#F1F4F9; text-decoration:none;">{n["titulo"]}</a>' if link else n["titulo"]
             filas_html += f"""
             <div style="padding:10px 0; border-bottom:1px solid #1C3324; display:flex; align-items:flex-start; gap:8px;">
-                <span style="color:#F2994A; font-size:0.9rem; line-height:1.4;">📄</span>
+                <span style="color:#BD4E1E; font-size:0.9rem; line-height:1.4;">📄</span>
                 <span style="font-size:0.88rem; line-height:1.4;">{titulo_html}</span>
             </div>"""
 
         st.markdown(_sin_sangria(f"""
         <div style="background:#152018; border:1px solid #26402F; border-radius:8px; padding:14px 16px;">
             <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-               font-size:1.1rem; color:#F2994A; letter-spacing:0.03em; margin:0 0 8px 0;
-               border-bottom:2px solid #F2994A; display:inline-block; padding-bottom:4px;">NOTICIAS</p>
+               font-size:1.1rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 8px 0;
+               border-bottom:2px solid #BD4E1E; display:inline-block; padding-bottom:4px;">NOTICIAS</p>
             {filas_html}
         </div>
         """), unsafe_allow_html=True)
@@ -718,7 +718,7 @@ if st.session_state.pagina == "inicio":
 if st.session_state.pagina == "lesiones":
     encabezado_sitio("lesiones")
     hero(
-        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#F2994A;">Injuries</span>',
+        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#BD4E1E;">Injuries</span>',
         "Reporte de lesiones recientes de toda la liga.",
     )
 
