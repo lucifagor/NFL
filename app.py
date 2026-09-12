@@ -87,19 +87,19 @@ def inyectar_estilos():
 
     /* Botón primario: acento dorado único */
     [data-testid="stButton"] button[kind="primary"] {
-        background: #FF6B4A;
-        color: #0D2B2E;
+        background: #F2994A;
+        color: #14241A;
         border: none;
         font-weight: 600;
         border-radius: 6px;
     }
     [data-testid="stButton"] button[kind="primary"]:hover {
-        background: #FF8A6B;
-        color: #0D2B2E;
+        background: #F5AD6E;
+        color: #14241A;
     }
     [data-testid="stButton"] button:not([kind="primary"]) {
         border-radius: 6px;
-        border: 1px solid #1D4145;
+        border: 1px solid #26402F;
     }
 
     /* Métricas con el tono condensado del marcador */
@@ -107,21 +107,21 @@ def inyectar_estilos():
         font-family: 'Barlow Condensed', sans-serif;
         font-weight: 700;
     }
-    [data-testid="stMetricLabel"] { color: #8FA9A5; }
+    [data-testid="stMetricLabel"] { color: #9CB3A3; }
 
     /* Tabs: subrayado dorado en la pestaña activa */
     [data-testid="stTabs"] button[aria-selected="true"] {
-        color: #FF6B4A !important;
-        border-bottom-color: #FF6B4A !important;
+        color: #F2994A !important;
+        border-bottom-color: #F2994A !important;
     }
 
     /* Barra de progreso (probabilidad) en dorado */
     [data-testid="stProgress"] > div > div > div {
-        background-color: #FF6B4A !important;
+        background-color: #F2994A !important;
     }
 
     /* Sidebar con borde sutil */
-    [data-testid="stSidebar"] { border-right: 1px solid #1D4145; }
+    [data-testid="stSidebar"] { border-right: 1px solid #26402F; }
 
     /* Franja de "campo cortado" — línea de yarda diagonal repetida */
     .franja-campo {
@@ -129,7 +129,7 @@ def inyectar_estilos():
         background: repeating-linear-gradient(
             -45deg, #1F6B3A, #1F6B3A 10px, #2A8449 10px, #2A8449 20px
         );
-        border-bottom: 2px solid #FF6B4A;
+        border-bottom: 2px solid #F2994A;
         margin: -1rem -1rem 1rem -1rem;
     }
 
@@ -139,14 +139,14 @@ def inyectar_estilos():
         margin-bottom: 12px; scrollbar-width: thin;
     }
     .ticker-juego {
-        flex: 0 0 auto; background: #123539; border: 1px solid #1D4145;
-        border-radius: 6px; padding: 8px 14px; min-width: 130px;
+        flex: 0 0 auto; background: #1C3324; border: 1px solid #26402F;
+        border-radius: 6px; padding: 8px 14px; min-width: 170px; max-width: 210px;
     }
     .ticker-equipo { display:flex; align-items:center; justify-content:space-between; gap:8px; }
     .ticker-equipo img { width:20px; height:20px; }
     .ticker-abbr { font-weight:700; font-size:0.85rem; color:#F1F4F9; }
-    .ticker-score { font-weight:700; font-size:0.85rem; color:#FF6B4A; }
-    .ticker-estado { font-size:0.7rem; color:#8FA9A5; text-align:center; margin-top:4px; }
+    .ticker-score { font-weight:700; font-size:0.85rem; color:#F2994A; }
+    .ticker-estado { font-size:0.68rem; color:#9CB3A3; text-align:center; margin-top:4px; line-height:1.3; white-space:normal; }
     </style>
     """), unsafe_allow_html=True)
 
@@ -154,6 +154,18 @@ def inyectar_estilos():
 def franja_campo():
     """Franja decorativa delgada tipo línea de yarda cortada, arriba de todo."""
     st.markdown('<div class="franja-campo"></div>', unsafe_allow_html=True)
+
+
+_MESES_ES = {1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
+             7: "jul", 8: "ago", 9: "sep", 10: "oct", 11: "nov", 12: "dic"}
+
+
+def _fecha_corta(fecha_iso: str) -> str:
+    try:
+        d = datetime.date.fromisoformat(fecha_iso)
+        return f"{d.day} {_MESES_ES[d.month]}"
+    except Exception:
+        return fecha_iso
 
 
 def ticker_marcadores(partidos: list):
@@ -164,8 +176,17 @@ def ticker_marcadores(partidos: list):
     for p in partidos:
         away_score = p["away_score"] if p["away_score"] is not None else "-"
         home_score = p["home_score"] if p["home_score"] is not None else "-"
-        estado = {"NS": "Por jugar", "FT": "Final", "AOT": "Final (OT)"}.get(p["estado"], p["estado"])
-        hora = f" · {p['hora']}" if p["estado"] == "NS" and p.get("hora") else ""
+        if p["estado"] in ("FT", "AOT"):
+            estado_txt = "Final" if p["estado"] == "FT" else "Final (OT)"
+        else:
+            partes = []
+            if p.get("fecha"):
+                partes.append(_fecha_corta(p["fecha"]))
+            if p.get("hora"):
+                partes.append(p["hora"])
+            if p.get("estadio"):
+                partes.append(p["estadio"])
+            estado_txt = " · ".join(partes) if partes else "Por confirmar"
         tarjetas += f"""
         <div class="ticker-juego">
             <div class="ticker-equipo">
@@ -176,7 +197,7 @@ def ticker_marcadores(partidos: list):
                 <img src="{logo_url(p['home_abbr'])}"><span class="ticker-abbr">{p['home_abbr']}</span>
                 <span class="ticker-score">{home_score}</span>
             </div>
-            <div class="ticker-estado">{estado}{hora}</div>
+            <div class="ticker-estado">{estado_txt}</div>
         </div>"""
     st.markdown(_sin_sangria(f'<div class="ticker-marcadores">{tarjetas}</div>'), unsafe_allow_html=True)
 
@@ -185,9 +206,9 @@ def hero(titulo: str, subtitulo: str = ""):
     """Encabezado con el mismo tono condensado en toda la app, con una
     barra de acento — más deliberado que un st.title suelto."""
     st.markdown(_sin_sangria(f"""
-    <div style="border-left: 4px solid #FF6B4A; padding-left: 16px; margin-bottom: 8px;">
+    <div style="border-left: 4px solid #F2994A; padding-left: 16px; margin-bottom: 8px;">
         <h1 style="margin: 0; font-size: 2.4rem;">{titulo}</h1>
-        {f'<p style="color: #8FA9A5; margin-top: 4px;">{subtitulo}</p>' if subtitulo else ''}
+        {f'<p style="color: #9CB3A3; margin-top: 4px;">{subtitulo}</p>' if subtitulo else ''}
     </div>
     """), unsafe_allow_html=True)
 
@@ -198,9 +219,9 @@ def _escudo_svg(tamano: int = 40) -> str:
     sin usar marcas registradas de terceros."""
     return f"""<svg width="{tamano}" height="{int(tamano*1.1)}" viewBox="0 0 44 48" xmlns="http://www.w3.org/2000/svg">
         <path d="M22 2 L42 9 L42 22 C42 34 33 43 22 46 C11 43 2 34 2 22 L2 9 Z"
-              fill="#123539" stroke="#FF6B4A" stroke-width="2.5"/>
+              fill="#1C3324" stroke="#F2994A" stroke-width="2.5"/>
         <text x="22" y="33" font-family="'Barlow Condensed', sans-serif" font-weight="700"
-              font-size="24" fill="#FF6B4A" text-anchor="middle">W</text>
+              font-size="24" fill="#F2994A" text-anchor="middle">W</text>
     </svg>"""
 
 
@@ -212,9 +233,9 @@ def marca_completa():
         {_escudo_svg(52)}
         <div>
             <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:2.1rem; line-height:1; letter-spacing:0.01em;">
-                <span style="color:#F1F4F9;">NFL</span> <span style="color:#FF6B4A;">WARRIORS</span>
+                <span style="color:#F1F4F9;">NFL</span> <span style="color:#F2994A;">WARRIORS</span>
             </div>
-            <div style="color:#8FA9A5; font-size:0.95rem; margin-top:2px;">Pronósticos con lógica, no con corazonadas.</div>
+            <div style="color:#9CB3A3; font-size:0.95rem; margin-top:2px;">Pronósticos con lógica, no con corazonadas.</div>
         </div>
     </div>
     """), unsafe_allow_html=True)
@@ -226,10 +247,10 @@ def marca_compacta():
     parte del menú principal."""
     st.markdown(_sin_sangria(f"""
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;
-                padding-bottom:12px; border-bottom:1px solid #1D4145;">
+                padding-bottom:12px; border-bottom:1px solid #26402F;">
         {_escudo_svg(28)}
         <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem; letter-spacing:0.01em;">
-            <span style="color:#F1F4F9;">NFL</span> <span style="color:#FF6B4A;">WARRIORS</span>
+            <span style="color:#F1F4F9;">NFL</span> <span style="color:#F2994A;">WARRIORS</span>
         </div>
     </div>
     """), unsafe_allow_html=True)
@@ -259,7 +280,7 @@ def barra_navegacion(activo: str):
         <div class="nav-marca">
             {_escudo_svg(30)}
             <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.25rem;">
-                <span style="color:#F1F4F9;">NFL</span> <span style="color:#FF6B4A;">WARRIORS</span>
+                <span style="color:#F1F4F9;">NFL</span> <span style="color:#F2994A;">WARRIORS</span>
             </div>
         </div>
         """), unsafe_allow_html=True)
@@ -277,7 +298,7 @@ def barra_navegacion(activo: str):
                     st.session_state.pagina = clave
                     st.rerun()
 
-    st.markdown('<hr style="border-color:#1D4145; margin-top:0;">', unsafe_allow_html=True)
+    st.markdown('<hr style="border-color:#26402F; margin-top:0;">', unsafe_allow_html=True)
 
 
 def encabezado_sitio(activo: str):
@@ -337,12 +358,12 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         pct_txt = "-" if row["V"] == 0 else f"{pct:.3f}".lstrip("0")
         filas_html += f"""
         <tr>
-            <td style="padding:6px 6px; background:#0D2B2E;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
-            <td style="padding:8px 10px; font-weight:700; color:#F5F7FA; white-space:nowrap; background:#0D2B2E; font-size:1rem;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#0D2B2E; white-space:nowrap;">{row['V']}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#0D2B2E; white-space:nowrap;">{row['D']}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#0D2B2E; white-space:nowrap;">{row['E']}</td>
-            <td style="text-align:center; color:#E4E8EF; font-weight:600; background:#0D2B2E; white-space:nowrap;">{pct_txt}</td>
+            <td style="padding:6px 6px; background:#14241A;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
+            <td style="padding:8px 10px; font-weight:700; color:#F5F7FA; white-space:nowrap; background:#14241A; font-size:1rem;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#14241A; white-space:nowrap;">{row['V']}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#14241A; white-space:nowrap;">{row['D']}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#14241A; white-space:nowrap;">{row['E']}</td>
+            <td style="text-align:center; color:#E4E8EF; font-weight:600; background:#14241A; white-space:nowrap;">{pct_txt}</td>
         </tr>"""
 
     return _sin_sangria(f"""
@@ -455,7 +476,7 @@ def marcadores_cacheados(season: int, api_key: str = ""):
             "away_score": p["away_score"] if p["away_score"] not in ("-", "", None) else None,
             "home_score": p["home_score"] if p["home_score"] not in ("-", "", None) else None,
             "estado": "FT" if "final" in p.get("estado", "").lower() else "NS",
-            "fecha": p.get("fecha", ""), "hora": "",
+            "fecha": p.get("fecha", ""), "hora": "", "estadio": "",
         }
         for p in crudo
     ]
