@@ -168,16 +168,20 @@ def inyectar_estilos():
     .ticker-estado { font-size:0.7rem; color:#1F241E; text-align:center; line-height:1.3; white-space:normal; }
     .ticker-estadio { font-size:0.65rem; color:#3E4A42; font-weight:600; text-align:center; margin-top:1px; line-height:1.3; white-space:normal; }
 
-    /* Tarjetas de equipo (lista de Noticias) — logo + abreviatura como un solo botón blanco */
+    /* Tarjetas de equipo (lista de Noticias) — tipo tecla de teclado,
+       toda la tarjeta es clicable (botón invisible cubre todo encima). */
     div[class*="st-key-equipo_cell_"] {
+        position: relative;
         background: #FFFFFF; border: 1px solid #AEB4A9; border-radius: 8px;
-        padding: 6px 2px 2px 2px; text-align: center;
+        padding: 10px 2px 8px 2px; text-align: center;
+        box-shadow: 0 3px 0 #8B9187, 0 5px 8px rgba(0,0,0,0.3);
+        margin-bottom: 4px;
     }
     div[class*="st-key-equipo_cell_"] button {
-        background: transparent !important; border: none !important;
-        color: #14241A !important; font-weight: 700 !important; padding: 2px !important;
+        position: absolute !important; inset: 0 !important;
+        width: 100% !important; height: 100% !important;
+        opacity: 0 !important; cursor: pointer; margin: 0 !important; padding: 0 !important;
     }
-    div[class*="st-key-equipo_cell_"] button:hover { color: #BD4E1E !important; }
     </style>
     """), unsafe_allow_html=True)
 
@@ -501,13 +505,14 @@ def roster_equipo_cacheado(team_abbr: str, season: int):
 
 
 def lista_equipos_sidebar():
-    """Equipos agrupados por división — el nombre de la división a la
-    izquierda, y los 4 equipos de esa división como tarjetas blancas
-    (logo grande + abreviatura) a la derecha. Clic en cualquiera lleva
-    al detalle de ese equipo (calendario, roster, standing)."""
+    """Equipos agrupados por división — el nombre de la división arriba
+    de cada grupo de 4, y cada equipo como una tarjeta blanca clicable
+    completa (logo grande centrado + abreviatura, toda la tarjeta es un
+    solo hipervínculo). Clic en cualquiera lleva al detalle de ese
+    equipo (calendario, roster, standing)."""
     st.markdown(_sin_sangria("""
     <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-       font-size:1.1rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
+       font-size:1.3rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
        text-align:center;">EQUIPOS</p>
     """), unsafe_allow_html=True)
 
@@ -524,18 +529,23 @@ def lista_equipos_sidebar():
         equipos_division = divisiones.get(division, [])
         if not equipos_division:
             continue
-        col_div, *cols_equipos = st.columns([1.1, 1, 1, 1, 1])
-        with col_div:
-            st.markdown(_sin_sangria(f"""
-            <div style="display:flex; align-items:center; justify-content:center; height:100%;
-                 font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.78rem;
-                 color:#9CB3A3; text-align:center; line-height:1.15;">{division}</div>
-            """), unsafe_allow_html=True)
+
+        st.markdown(_sin_sangria(f"""
+        <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
+           font-size:0.95rem; color:#9CB3A3; text-align:center; margin:10px 0 6px 0;">{division}</p>
+        """), unsafe_allow_html=True)
+
+        cols_equipos = st.columns(4)
         for col, abbr in zip(cols_equipos, equipos_division):
             with col:
                 with st.container(key=f"equipo_cell_{abbr}"):
-                    st.image(logo_url(abbr), width=34)
-                    if st.button(abbr, key=f"lista_equipo_{abbr}", use_container_width=True):
+                    st.markdown(_sin_sangria(f"""
+                    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                        <img src="{logo_url(abbr)}" style="width:68px; height:auto; display:block; margin:0 auto 6px auto;">
+                        <span style="font-weight:700; color:#14241A; font-size:0.85rem;">{abbr}</span>
+                    </div>
+                    """), unsafe_allow_html=True)
+                    if st.button(" ", key=f"lista_equipo_{abbr}", use_container_width=True):
                         st.session_state.equipo_detalle = abbr
                         st.session_state.pagina = "equipo_detalle"
                         st.rerun()
