@@ -176,12 +176,29 @@ def inyectar_estilos():
         padding: 10px 2px 8px 2px; text-align: center;
         box-shadow: 0 3px 0 #8B9187, 0 5px 8px rgba(0,0,0,0.3);
         margin-bottom: 4px;
+        overflow: hidden;
     }
-    div[class*="st-key-equipo_cell_"] button {
+    div[class*="st-key-equipo_cell_"] [data-testid="stButton"] {
+        position: absolute !important; inset: 0 !important;
+        width: 100% !important; height: 100% !important;
+        margin: 0 !important; padding: 0 !important;
+    }
+    div[class*="st-key-equipo_cell_"] [data-testid="stButton"] button {
         position: absolute !important; inset: 0 !important;
         width: 100% !important; height: 100% !important;
         opacity: 0 !important; cursor: pointer; margin: 0 !important; padding: 0 !important;
+        min-height: 0 !important;
     }
+
+    /* Tarjetas de noticias — blancas con sombra, texto negro (mismo
+       lenguaje visual que las tarjetas de equipo, para que se lea bien
+       sobre el fondo con imagen). */
+    .noticia-card {
+        background: #FFFFFF; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+        padding: 14px; text-align: center; margin-bottom: 12px;
+    }
+    .noticia-card p { color: #14241A; }
+    .noticia-card a { color: #BD4E1E; font-weight: 600; }
     </style>
     """), unsafe_allow_html=True)
 
@@ -532,7 +549,7 @@ def lista_equipos_sidebar():
 
         st.markdown(_sin_sangria(f"""
         <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-           font-size:0.95rem; color:#9CB3A3; text-align:center; margin:10px 0 6px 0;">{division}</p>
+           font-size:1.15rem; color:#E8ECE9; text-align:center; margin:10px 0 6px 0;">{division}</p>
         """), unsafe_allow_html=True)
 
         cols_equipos = st.columns(4)
@@ -541,7 +558,7 @@ def lista_equipos_sidebar():
                 with st.container(key=f"equipo_cell_{abbr}"):
                     st.markdown(_sin_sangria(f"""
                     <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                        <img src="{logo_url(abbr)}" style="width:68px; height:auto; display:block; margin:0 auto 6px auto;">
+                        <img src="{logo_url(abbr)}" style="width:82px; height:auto; display:block; margin:0 auto 6px auto;">
                         <span style="font-weight:700; color:#14241A; font-size:0.85rem;">{abbr}</span>
                     </div>
                     """), unsafe_allow_html=True)
@@ -552,8 +569,9 @@ def lista_equipos_sidebar():
 
 
 def renderizar_noticias(noticias: list):
-    """Grilla de 2 columnas: foto (clicable, tamaño parejo) arriba, nota
-    abajo — usado tanto en Noticias generales como por equipo."""
+    """Grilla de 2 columnas: tarjeta blanca con sombra — foto (clicable,
+    tamaño parejo) arriba, nota en texto negro abajo — usado tanto en
+    Noticias generales como por equipo."""
     if noticias and "error" in noticias[0]:
         st.info(f"No se pudieron cargar las noticias: {noticias[0]['error']}")
     elif not noticias:
@@ -564,25 +582,24 @@ def renderizar_noticias(noticias: list):
             cols = st.columns(2)
             for col, n in zip(cols, par):
                 with col:
-                    with st.container(border=True):
-                        link = n.get("link", "")
-                        imagen_html = ""
-                        if n.get("imagen"):
-                            img_tag = (
-                                f'<img src="{n["imagen"]}" style="width:70%; aspect-ratio:16/10; '
-                                f'object-fit:cover; border-radius:6px; margin:0 auto 10px auto; display:block;">'
-                            )
-                            imagen_html = f'<a href="{link}">{img_tag}</a>' if link else img_tag
+                    link = n.get("link", "")
+                    imagen_html = ""
+                    if n.get("imagen"):
+                        img_tag = (
+                            f'<img src="{n["imagen"]}" style="width:70%; aspect-ratio:16/10; '
+                            f'object-fit:cover; border-radius:6px; margin:0 auto 10px auto; display:block;">'
+                        )
+                        imagen_html = f'<a href="{link}">{img_tag}</a>' if link else img_tag
 
-                        st.markdown(_sin_sangria(f"""
-                        <div style="text-align:center;">
-                            {imagen_html}
-                            <p style="font-weight:700; margin:0 0 4px 0;">{n['titulo']}</p>
-                            <p style="color:#8FA398; font-size:0.75rem; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.03em;">{n.get('fuente', '')}</p>
-                            <p style="color:#CDD1C7; font-size:0.9rem; margin:0 0 8px 0;">{n.get('descripcion', '')}</p>
-                            {f'<a href="{link}">Leer más</a>' if link else ''}
-                        </div>
-                        """), unsafe_allow_html=True)
+                    st.markdown(_sin_sangria(f"""
+                    <div class="noticia-card">
+                        {imagen_html}
+                        <p style="font-weight:700; margin:0 0 4px 0;">{n['titulo']}</p>
+                        <p style="color:#7A7A7A; font-size:0.75rem; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.03em;">{n.get('fuente', '')}</p>
+                        <p style="color:#3A3A3A; font-size:0.9rem; margin:0 0 8px 0;">{n.get('descripcion', '')}</p>
+                        {f'<a href="{link}">Leer más</a>' if link else ''}
+                    </div>
+                    """), unsafe_allow_html=True)
 
 
 def grid_iconos_equipos():
@@ -775,20 +792,21 @@ if st.session_state.pagina == "inicio":
         filas_html = ""
         for n in pasadas:
             link = n.get("link", "")
-            titulo_html = f'<a href="{link}" style="color:#F1F4F9; text-decoration:none;">{n["titulo"]}</a>' if link else n["titulo"]
+            titulo_html = f'<a href="{link}" style="color:#BD4E1E; text-decoration:none;">{n["titulo"]}</a>' if link else n["titulo"]
             fuente_txt = n.get("fuente", "")
             filas_html += f"""
-            <div style="padding:10px 0; border-bottom:1px solid #1C3324; display:flex; align-items:flex-start; gap:8px;">
-                <span style="color:#BD4E1E; font-size:0.9rem; line-height:1.4;">🏈</span>
-                <span style="font-size:0.88rem; line-height:1.4;">{titulo_html}
-                    <span style="display:block; color:#8FA398; font-size:0.7rem; text-transform:uppercase;">{fuente_txt}</span>
+            <div style="background:#FFFFFF; border-radius:8px; box-shadow:0 3px 6px rgba(0,0,0,0.3);
+                 padding:10px 12px; margin-bottom:8px; display:flex; align-items:flex-start; gap:8px;">
+                <span style="font-size:0.9rem; line-height:1.4;">🏈</span>
+                <span style="font-size:0.88rem; line-height:1.4; color:#14241A; font-weight:600;">{titulo_html}
+                    <span style="display:block; color:#7A7A7A; font-size:0.7rem; text-transform:uppercase; font-weight:400;">{fuente_txt}</span>
                 </span>
             </div>"""
 
         st.markdown(_sin_sangria(f"""
-        <div style="background:#152018; border:1px solid #26402F; border-radius:8px; padding:14px 16px;">
+        <div>
             <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-               font-size:1.1rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 8px 0;
+               font-size:1.1rem; color:#E8ECE9; letter-spacing:0.03em; margin:0 0 10px 0;
                text-align:center;">NOTICIAS</p>
             {filas_html}
         </div>
