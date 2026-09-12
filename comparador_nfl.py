@@ -28,6 +28,7 @@ rival específico), difíciles de sacar de una API limpia.
 
 from __future__ import annotations  # compatibilidad con Python 3.9 (str | None, etc.)
 
+import datetime
 import math
 import pandas as pd
 import requests
@@ -666,6 +667,48 @@ def obtener_equipos_api_sports(api_key: str, season: int) -> dict:
         if item.get("id") is not None:
             mapeo[abbr] = item["id"]
     return mapeo
+
+
+def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
+    """
+    Marcadores de la semana más cercana a hoy (la que se está jugando o la
+    próxima) vía API-Sports. Trae toda la temporada en 1 sola consulta y
+    filtra la semana más próxima, para no gastar cuota pidiendo semana por
+    semana.
+    """
+    data = _api_sports_get(api_key, "/games", {"league": API_SPORTS_LEAGUE_NFL, "season": season})
+    juegos = data.get("response", [])
+    if not juegos:
+        return []
+
+    hoy = datetime.date.today()
+
+    def _fecha(j):
+        try:
+            return datetime.date.fromisoformat(j["game"]["date"]["date"])
+        except Exception:
+            return hoy
+
+    semana_actual = min(juegos, key=lambda j: abs((_fecha(j) - hoy).days))["game"].get("week")
+    de_esta_semana = [j for j in juegos if j["game"].get("week") == semana_actual]
+    de_esta_semana.sort(key=_fecha)
+
+    resultado = []
+    for j in de_esta_semana:
+        home = (j.get("teams") or {}).get("home") or {}
+        away = (j.get("teams") or {}).get("away") or {}
+        scores = j.get("scores") or {}
+        estado = ((j.get("game") or {}).get("status") or {}).get("short", "NS")
+        resultado.append({
+            "away_abbr": _abbr_desde_nombre_api_sports(away.get("name", "")),
+            "home_abbr": _abbr_desde_nombre_api_sports(home.get("name", "")),
+            "away_score": (scores.get("away") or {}).get("total"),
+            "home_score": (scores.get("home") or {}).get("total"),
+            "estado": estado,
+            "fecha": (j.get("game") or {}).get("date", {}).get("date", ""),
+            "hora": (j.get("game") or {}).get("date", {}).get("time", ""),
+        })
+    return resultado
 
 
 def obtener_lesiones_liga_api_sports(api_key: str, season: int, limite: int = 30) -> list:

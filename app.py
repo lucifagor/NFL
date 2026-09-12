@@ -36,6 +36,8 @@ from comparador_nfl import (
     obtener_lesiones_liga_api_sports,
     obtener_standings,
     obtener_standings_api_sports,
+    obtener_marcadores_actuales,
+    obtener_marcadores_api_sports,
     logo_url,
     favorito_segun_mercado,
     comparar_equipos,
@@ -120,8 +122,63 @@ def inyectar_estilos():
 
     /* Sidebar con borde sutil */
     [data-testid="stSidebar"] { border-right: 1px solid #2A3348; }
+
+    /* Franja de "campo cortado" — línea de yarda diagonal repetida */
+    .franja-campo {
+        height: 10px;
+        background: repeating-linear-gradient(
+            -45deg, #1F6B3A, #1F6B3A 10px, #2A8449 10px, #2A8449 20px
+        );
+        border-bottom: 2px solid #FFB627;
+        margin: -1rem -1rem 1rem -1rem;
+    }
+
+    /* Ticker de marcadores — scroll horizontal */
+    .ticker-marcadores {
+        display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 12px 2px;
+        margin-bottom: 12px; scrollbar-width: thin;
+    }
+    .ticker-juego {
+        flex: 0 0 auto; background: #152340; border: 1px solid #223255;
+        border-radius: 6px; padding: 8px 14px; min-width: 130px;
+    }
+    .ticker-equipo { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .ticker-equipo img { width:20px; height:20px; }
+    .ticker-abbr { font-weight:700; font-size:0.85rem; color:#F1F4F9; }
+    .ticker-score { font-weight:700; font-size:0.85rem; color:#FFB627; }
+    .ticker-estado { font-size:0.7rem; color:#8B96AC; text-align:center; margin-top:4px; }
     </style>
     """), unsafe_allow_html=True)
+
+
+def franja_campo():
+    """Franja decorativa delgada tipo línea de yarda cortada, arriba de todo."""
+    st.markdown('<div class="franja-campo"></div>', unsafe_allow_html=True)
+
+
+def ticker_marcadores(partidos: list):
+    """Renderiza el ticker horizontal de marcadores estilo NFL.com."""
+    if not partidos:
+        return
+    tarjetas = ""
+    for p in partidos:
+        away_score = p["away_score"] if p["away_score"] is not None else "-"
+        home_score = p["home_score"] if p["home_score"] is not None else "-"
+        estado = {"NS": "Por jugar", "FT": "Final", "AOT": "Final (OT)"}.get(p["estado"], p["estado"])
+        hora = f" · {p['hora']}" if p["estado"] == "NS" and p.get("hora") else ""
+        tarjetas += f"""
+        <div class="ticker-juego">
+            <div class="ticker-equipo">
+                <img src="{logo_url(p['away_abbr'])}"><span class="ticker-abbr">{p['away_abbr']}</span>
+                <span class="ticker-score">{away_score}</span>
+            </div>
+            <div class="ticker-equipo">
+                <img src="{logo_url(p['home_abbr'])}"><span class="ticker-abbr">{p['home_abbr']}</span>
+                <span class="ticker-score">{home_score}</span>
+            </div>
+            <div class="ticker-estado">{estado}{hora}</div>
+        </div>"""
+    st.markdown(_sin_sangria(f'<div class="ticker-marcadores">{tarjetas}</div>'), unsafe_allow_html=True)
 
 
 def hero(titulo: str, subtitulo: str = ""):
@@ -324,6 +381,30 @@ def standings_cacheados(season: int, api_key: str = ""):
     return obtener_standings(season)
 
 
+@st.cache_data(show_spinner=False, ttl=300)
+def marcadores_cacheados(season: int, api_key: str = ""):
+    """Marcadores de la semana actual — API-Sports si hay key (más
+    confiable, incluye el marcador exacto); si no, respaldo con ESPN."""
+    if api_key:
+        try:
+            return obtener_marcadores_api_sports(api_key, season)
+        except Exception:
+            pass
+    crudo = obtener_marcadores_actuales()
+    if crudo and "error" in crudo[0]:
+        return []
+    return [
+        {
+            "away_abbr": p["away_abbr"], "home_abbr": p["home_abbr"],
+            "away_score": p["away_score"] if p["away_score"] not in ("-", "", None) else None,
+            "home_score": p["home_score"] if p["home_score"] not in ("-", "", None) else None,
+            "estado": "FT" if "final" in p.get("estado", "").lower() else "NS",
+            "fecha": p.get("fecha", ""), "hora": "",
+        }
+        for p in crudo
+    ]
+
+
 def ejecutar_comparacion(stats, equipo_a, equipo_b, local, usar_clima, usar_odds):
     """Corre el modelo para un partido y devuelve (resultado, clima) —
     lógica compartida entre el modo individual y el modo semana completa."""
@@ -431,7 +512,13 @@ if not NFL_DATA_PY_OK:
 # PANTALLA: INICIO — solo noticias y lesiones recientes de la liga
 # ============================================================
 if st.session_state.pagina == "inicio":
+    franja_campo()
     marca_completa()
+
+    with st.spinner("Cargando marcadores..."):
+        partidos_ticker = marcadores_cacheados(datetime.date.today().year, api_key=API_SPORTS_KEY)
+    ticker_marcadores(partidos_ticker)
+
     st.divider()
     hero("Noticias", "Lo último de la liga, antes de ver los pronósticos.")
 
