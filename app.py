@@ -33,6 +33,7 @@ from comparador_nfl import (
     obtener_lineas_apuestas,
     obtener_noticias_nfl,
     obtener_noticias_equipo,
+    obtener_noticias_combinadas,
     obtener_lesiones_liga,
     obtener_lesiones_liga_api_sports,
     obtener_standings,
@@ -467,8 +468,9 @@ def stats_cacheadas(season: int, temporadas_historicas: int = 0) -> pd.DataFrame
 
 
 @st.cache_data(show_spinner=False, ttl=900)
-def noticias_cacheadas(limite: int = 10):
-    return obtener_noticias_nfl(limite)
+def noticias_cacheadas(limite_por_fuente: int = 10):
+    """Combina ESPN + NBC Sports + Yahoo Sports, sin duplicados."""
+    return obtener_noticias_combinadas(limite_por_fuente)
 
 
 @st.cache_data(show_spinner=False, ttl=900)
@@ -487,22 +489,25 @@ def roster_equipo_cacheado(team_abbr: str, season: int):
 
 
 def lista_equipos_sidebar():
-    """Lista de los 32 equipos (nombre + abreviatura) como botones — clic
-    en cualquiera lleva al detalle de ese equipo (calendario, roster,
-    standing)."""
+    """Cuadrícula de los 32 equipos (logo + abreviatura), 4 por fila —
+    clic en cualquiera lleva al detalle de ese equipo (calendario,
+    roster, standing)."""
     st.markdown(_sin_sangria("""
     <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
        font-size:1.1rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 8px 0;
-       border-bottom:2px solid #BD4E1E; display:inline-block; padding-bottom:4px;">EQUIPOS</p>
+       text-align:center;">EQUIPOS</p>
     """), unsafe_allow_html=True)
-    for abbr in EQUIPOS:
-        if st.button(
-            f"{NOMBRES_EQUIPO.get(abbr, abbr)} ({abbr})",
-            key=f"lista_equipo_{abbr}", use_container_width=True,
-        ):
-            st.session_state.equipo_detalle = abbr
-            st.session_state.pagina = "equipo_detalle"
-            st.rerun()
+    por_fila = 4
+    for i in range(0, len(EQUIPOS), por_fila):
+        fila = EQUIPOS[i:i + por_fila]
+        cols = st.columns(por_fila)
+        for col, abbr in zip(cols, fila):
+            with col:
+                st.image(logo_url(abbr), width=22)
+                if st.button(abbr, key=f"lista_equipo_{abbr}", use_container_width=True):
+                    st.session_state.equipo_detalle = abbr
+                    st.session_state.pagina = "equipo_detalle"
+                    st.rerun()
 
 
 def renderizar_noticias(noticias: list):
@@ -531,7 +536,8 @@ def renderizar_noticias(noticias: list):
                         st.markdown(_sin_sangria(f"""
                         <div style="text-align:center;">
                             {imagen_html}
-                            <p style="font-weight:700; margin:0 0 6px 0;">{n['titulo']}</p>
+                            <p style="font-weight:700; margin:0 0 4px 0;">{n['titulo']}</p>
+                            <p style="color:#8FA398; font-size:0.75rem; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.03em;">{n.get('fuente', '')}</p>
                             <p style="color:#CDD1C7; font-size:0.9rem; margin:0 0 8px 0;">{n.get('descripcion', '')}</p>
                             {f'<a href="{link}">Leer más</a>' if link else ''}
                         </div>
@@ -729,17 +735,20 @@ if st.session_state.pagina == "inicio":
         for n in pasadas:
             link = n.get("link", "")
             titulo_html = f'<a href="{link}" style="color:#F1F4F9; text-decoration:none;">{n["titulo"]}</a>' if link else n["titulo"]
+            fuente_txt = n.get("fuente", "")
             filas_html += f"""
             <div style="padding:10px 0; border-bottom:1px solid #1C3324; display:flex; align-items:flex-start; gap:8px;">
-                <span style="color:#BD4E1E; font-size:0.9rem; line-height:1.4;">📄</span>
-                <span style="font-size:0.88rem; line-height:1.4;">{titulo_html}</span>
+                <span style="color:#BD4E1E; font-size:0.9rem; line-height:1.4;">🏈</span>
+                <span style="font-size:0.88rem; line-height:1.4;">{titulo_html}
+                    <span style="display:block; color:#8FA398; font-size:0.7rem; text-transform:uppercase;">{fuente_txt}</span>
+                </span>
             </div>"""
 
         st.markdown(_sin_sangria(f"""
         <div style="background:#152018; border:1px solid #26402F; border-radius:8px; padding:14px 16px;">
             <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
                font-size:1.1rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 8px 0;
-               border-bottom:2px solid #BD4E1E; display:inline-block; padding-bottom:4px;">NOTICIAS</p>
+               text-align:center;">NOTICIAS</p>
             {filas_html}
         </div>
         """), unsafe_allow_html=True)

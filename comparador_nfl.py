@@ -30,8 +30,10 @@ from __future__ import annotations  # compatibilidad con Python 3.9 (str | None,
 
 import datetime
 import math
+import re
 import pandas as pd
 import requests
+import feedparser
 
 try:
     import nfl_data_py as nfl
@@ -480,6 +482,86 @@ def obtener_noticias_nfl(limite: int = 10) -> list:
         return noticias
     except Exception as e:
         return [{"error": str(e)}]
+
+
+FUENTES_RSS_NFL = {
+    "NBC Sports": "https://www.nbcsports.com/nfl.atom",
+    "Yahoo Sports": "https://sports.yahoo.com/nfl/rss/",
+}
+
+
+def obtener_noticias_rss(fuente_url: str, limite: int = 10) -> list:
+    """
+    Trae noticias de un feed RSS/Atom estándar (NBC, Yahoo, etc.) usando
+    feedparser — el formato RSS lleva ~20 años estable, así que es más
+    confiable que las APIs JSON no documentadas.
+    """
+    try:
+        feed = feedparser.parse(fuente_url)
+        if getattr(feed, "bozo", False) and not feed.entries:
+            return [{"error": str(feed.get("bozo_exception", "No se pudo leer el feed"))}]
+
+        noticias = []
+        for entry in feed.entries[:limite]:
+            imagen = None
+            media = entry.get("media_content") or []
+            if media:
+                imagen = media[0].get("url")
+            if not imagen:
+                for enlace in entry.get("links", []):
+                    if str(enlace.get("type", "")).startswith("image"):
+                        imagen = enlace.get("href")
+                        break
+
+            noticias.append({
+                "titulo": entry.get("title", "?"),
+                "descripcion": re.sub("<[^<]+?>", "", entry.get("summary", ""))[:220],
+                "imagen": imagen,
+                "link": entry.get("link", ""),
+                "fecha": entry.get("published", entry.get("updated", "")),
+            })
+        return noticias
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+def _normalizar_titulo(titulo: str) -> str:
+    """Reduce un titular a solo letras/números en minúscula, para poder
+    comparar si dos notas de fuentes distintas son la misma historia."""
+    return re.sub(r"[^a-z0-9]+", "", titulo.lower())
+
+
+def obtener_noticias_combinadas(limite_por_fuente: int = 10) -> list:
+    """
+    Combina noticias de ESPN + NBC Sports + Yahoo Sports en una sola
+    lista, quitando duplicados (misma historia reportada por más de una
+    fuente) comparando el titular normalizado.
+    """
+    fuentes = [
+        ("ESPN", lambda: obtener_noticias_nfl(limite_por_fuente)),
+        ("NBC Sports", lambda: obtener_noticias_rss(FUENTES_RSS_NFL["NBC Sports"], limite_por_fuente)),
+        ("Yahoo Sports", lambda: obtener_noticias_rss(FUENTES_RSS_NFL["Yahoo Sports"], limite_por_fuente)),
+    ]
+
+    combinadas = []
+    titulos_vistos = set()
+
+    for nombre_fuente, obtener in fuentes:
+        try:
+            items = obtener()
+        except Exception:
+            continue
+        if not items or "error" in items[0]:
+            continue
+        for n in items:
+            clave = _normalizar_titulo(n.get("titulo", ""))
+            if not clave or clave in titulos_vistos:
+                continue
+            titulos_vistos.add(clave)
+            n["fuente"] = nombre_fuente
+            combinadas.append(n)
+
+    return combinadas
 
 
 def obtener_noticias_equipo(team_abbr: str, limite: int = 10) -> list:
