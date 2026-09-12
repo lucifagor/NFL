@@ -174,7 +174,7 @@ def inyectar_estilos():
     div[class*="st-key-equipo_cell_"] {
         position: relative;
         background: #D8DBD4; border: 1px solid #AEB4A9; border-radius: 8px;
-        padding: 5px 1px 4px 1px; text-align: center;
+        padding: 3px 1px 2px 1px; text-align: center;
         box-shadow: 0 3px 0 #8B9187, 0 5px 8px rgba(0,0,0,0.3);
         margin-bottom: 4px;
         overflow: hidden;
@@ -540,8 +540,9 @@ def lista_equipos_sidebar():
     equipo (calendario, roster, standing)."""
     st.markdown(_sin_sangria("""
     <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-       font-size:2.6rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
-       text-align:center;">EQUIPOS</p>
+       font-size:1.4rem; color:#F1F4F9; letter-spacing:0.03em; margin:0 0 10px 0;
+       text-align:center; background:#1C3324; border:1px solid #26402F; border-radius:6px;
+       padding:8px 0;">EQUIPOS</p>
     """), unsafe_allow_html=True)
 
     # Agrupa los 32 equipos por división, en orden AFC Este..NFC Oeste.
@@ -569,8 +570,8 @@ def lista_equipos_sidebar():
                 with st.container(key=f"equipo_cell_{abbr}"):
                     st.markdown(_sin_sangria(f"""
                     <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                        <img src="{logo_url(abbr)}" style="width:41px; height:auto; display:block; margin:0 auto 4px auto;">
-                        <span style="font-weight:700; color:#14241A; font-size:0.7rem;">{abbr}</span>
+                        <img src="{logo_url(abbr)}" style="width:20px; height:auto; display:block; margin:0 auto 2px auto;">
+                        <span style="font-weight:700; color:#14241A; font-size:0.58rem;">{abbr}</span>
                     </div>
                     """), unsafe_allow_html=True)
                     if st.button(" ", key=f"lista_equipo_{abbr}", use_container_width=True):
@@ -789,7 +790,7 @@ if st.session_state.pagina == "inicio":
     principales = noticias[:6] if not (noticias and "error" in noticias[0]) else noticias
     pasadas = noticias[6:20] if not (noticias and "error" in noticias[0]) else []
 
-    col_equipos, col_principal, col_lista = st.columns([1, 2, 1])
+    col_equipos, col_principal, col_lista = st.columns([1, 2, 1], gap="large")
 
     with col_equipos:
         lista_equipos_sidebar()
@@ -804,7 +805,7 @@ if st.session_state.pagina == "inicio":
             titulo_html = f'<a href="{link}" style="color:#F1F4F9; text-decoration:none;">{n["titulo"]}</a>' if link else n["titulo"]
             fuente_txt = n.get("fuente", "")
             filas_html += f"""
-            <div style="padding:10px 0; border-bottom:1px solid #1C3324; display:flex; align-items:flex-start; gap:8px;">
+            <div style="padding:8px 10px; margin-bottom:6px; border:1px solid #AEB4A9; border-radius:6px; display:flex; align-items:flex-start; gap:8px;">
                 <span style="font-size:0.9rem; line-height:1.4;">🏈</span>
                 <span style="font-size:0.88rem; line-height:1.4; color:#F1F4F9; font-weight:600;">{titulo_html}
                     <span style="display:block; color:#8FA398; font-size:0.7rem; text-transform:uppercase; font-weight:400;">{fuente_txt}</span>
@@ -814,8 +815,9 @@ if st.session_state.pagina == "inicio":
         st.markdown(_sin_sangria(f"""
         <div>
             <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-               font-size:2.6rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
-               text-align:center;">NOTICIAS</p>
+               font-size:1.4rem; color:#F1F4F9; letter-spacing:0.03em; margin:0 0 10px 0;
+               text-align:center; background:#1C3324; border:1px solid #26402F; border-radius:6px;
+               padding:8px 0;">NOTICIAS</p>
             {filas_html}
         </div>
         """), unsafe_allow_html=True)
