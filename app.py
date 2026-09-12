@@ -123,26 +123,35 @@ def inyectar_estilos():
     /* Sidebar con borde sutil */
     [data-testid="stSidebar"] { border-right: 1px solid #26402F; }
 
-    /* Banner de "campo cortado" con diagonales — el balón vuela sobre él */
+    /* Banner de "campo cortado" con zonas de anotación en los bordes */
     .franja-campo {
         height: 64px;
-        background: repeating-linear-gradient(
-            -45deg, #1F6B3A, #1F6B3A 10px, #2A8449 10px, #2A8449 20px
-        );
-        border-bottom: 2px solid #F2994A;
+        display: flex;
         margin: -1rem -1rem 1rem -1rem;
+        border-bottom: 2px solid #F2994A;
         position: relative;
         overflow: hidden;
     }
+    .zona-anotacion {
+        width: 11%; min-width: 34px; background: #0F2015;
+        border-right: 3px solid #F1F4F9;
+    }
+    .zona-anotacion.derecha { border-right: none; border-left: 3px solid #F1F4F9; }
+    .zona-campo {
+        flex: 1;
+        background: repeating-linear-gradient(
+            -45deg, #1F6B3A, #1F6B3A 10px, #2A8449 10px, #2A8449 20px
+        );
+    }
     .balon-animado {
-        position: absolute; left: 50%; top: 50%; font-size: 2.4rem;
-        transform: translate(250%, -50%) rotate(25deg);
+        position: absolute; left: 50%; top: 50%;
+        transform: translate(430%, -50%) rotate(25deg);
         animation: volar-balon 1.3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
         animation-delay: 0.25s;
-        filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));
+        filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
     }
     @keyframes volar-balon {
-        0%   { transform: translate(250%, -50%) rotate(35deg); opacity: 0; }
+        0%   { transform: translate(430%, -50%) rotate(35deg); opacity: 0; }
         20%  { opacity: 1; }
         75%  { transform: translate(-40%, -50%) rotate(-8deg); }
         100% { transform: translate(-50%, -50%) rotate(0deg); }
@@ -170,10 +179,33 @@ def inyectar_estilos():
 
 
 def franja_campo():
-    """Banner decorativo tipo campo con diagonales, con el balón volando
-    desde la derecha hasta quedar al centro (animación de una sola vez al
-    cargar la página)."""
-    st.markdown('<div class="franja-campo"><span class="balon-animado">🏈</span></div>', unsafe_allow_html=True)
+    """Banner decorativo tipo campo, con zonas de anotación en los bordes
+    y el balón (dibujado con SVG, sin logos) volando desde la derecha
+    hasta quedar al centro — animación de una sola vez al cargar."""
+    st.markdown(_sin_sangria("""
+    <div class="franja-campo">
+        <div class="zona-anotacion izquierda"></div>
+        <div class="zona-campo"></div>
+        <div class="zona-anotacion derecha"></div>
+        <svg class="balon-animado" width="60" height="36" viewBox="0 0 100 60">
+            <defs>
+                <linearGradient id="cueroBalon" x1="10%" y1="10%" x2="90%" y2="90%">
+                    <stop offset="0%" stop-color="#9C5A2E"/>
+                    <stop offset="45%" stop-color="#6B3A1B"/>
+                    <stop offset="100%" stop-color="#3D1F0E"/>
+                </linearGradient>
+            </defs>
+            <ellipse cx="50" cy="30" rx="47" ry="21" fill="url(#cueroBalon)" stroke="#2A1508" stroke-width="2"/>
+            <ellipse cx="38" cy="20" rx="14" ry="6" fill="#B87A46" opacity="0.35"/>
+            <line x1="28" y1="30" x2="72" y2="30" stroke="#EFE6D8" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="36" y1="23" x2="36" y2="37" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
+            <line x1="43" y1="21" x2="43" y2="39" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
+            <line x1="50" y1="20" x2="50" y2="40" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
+            <line x1="57" y1="21" x2="57" y2="39" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
+            <line x1="64" y1="23" x2="64" y2="37" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+    </div>
+    """), unsafe_allow_html=True)
 
 
 _MESES_ES = {1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
@@ -323,14 +355,14 @@ def barra_navegacion(activo: str):
 
 
 def encabezado_sitio(activo: str):
-    """Encabezado compartido por TODA la app: franja de campo, menú de
-    navegación, y el ticker de marcadores de la semana actual — se ve
-    igual arriba de cualquier pantalla en la que estés."""
+    """Encabezado compartido por TODA la app: franja de campo, resultados
+    de la semana, y el menú de navegación — se ve igual arriba de
+    cualquier pantalla en la que estés."""
     franja_campo()
-    barra_navegacion(activo)
     with st.spinner("Cargando marcadores..."):
         partidos_ticker = marcadores_cacheados(datetime.date.today().year, api_key=API_SPORTS_KEY)
     ticker_marcadores(partidos_ticker)
+    barra_navegacion(activo)
 
 
 inyectar_estilos()
@@ -611,7 +643,6 @@ if not NFL_DATA_PY_OK:
 # ============================================================
 if st.session_state.pagina == "inicio":
     encabezado_sitio("inicio")
-    marca_completa()
 
     st.divider()
     hero("Noticias", "Lo último de la liga, antes de ver los pronósticos.")
