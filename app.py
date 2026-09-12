@@ -131,19 +131,6 @@ def inyectar_estilos():
         overflow: hidden;
         line-height: 0;
     }
-    .balon-animado {
-        position: absolute; left: 50%; top: 62%;
-        transform: translate(430%, -50%) rotate(25deg);
-        animation: volar-balon 1.3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
-        animation-delay: 0.25s;
-        filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
-    }
-    @keyframes volar-balon {
-        0%   { transform: translate(430%, -50%) rotate(35deg); opacity: 0; }
-        20%  { opacity: 1; }
-        75%  { transform: translate(-40%, -50%) rotate(-8deg); }
-        100% { transform: translate(-50%, -50%) rotate(0deg); }
-    }
 
     /* Ticker de marcadores — scroll horizontal */
     .ticker-marcadores {
@@ -167,10 +154,9 @@ def inyectar_estilos():
 
 
 def franja_campo():
-    """Banner ilustrado tipo estadio: graderías arriba, campo en
-    perspectiva con líneas de yarda, postes de gol en los bordes, y el
-    escudo NFLWarriors al centro del campo — más el balón (SVG propio,
-    sin logos de terceros) volando desde la derecha hasta el centro."""
+    """Banner ilustrado tipo estadio (estático): graderías arriba, campo
+    en perspectiva con líneas de yarda, postes de gol en los bordes, y
+    el escudo NFLWarriors al centro del campo."""
     # Líneas de yarda con perspectiva (el campo es un trapecio: ancho
     # abajo, angosto arriba, hacia el "horizonte" de las graderías).
     lineas = ""
@@ -212,28 +198,7 @@ def franja_campo():
             {lineas}
             <path d="M60 195 L60 150 M60 150 L40 110 M60 150 L80 110" stroke="#F2994A" stroke-width="4" fill="none" stroke-linecap="round"/>
             <path d="M1140 195 L1140 150 M1140 150 L1120 110 M1140 150 L1160 110" stroke="#F2994A" stroke-width="4" fill="none" stroke-linecap="round"/>
-            <image href="{LOGO_TEXTO_URL}" x="15" y="107" width="130" height="43"
-                   transform="rotate(-90 80 128)"/>
-            <image href="{LOGO_TEXTO_URL}" x="1055" y="107" width="130" height="43"
-                   transform="rotate(90 1120 128)"/>
-            <image href="{LOGO_ESCUDO_URL}" x="562" y="138" width="76" height="76"/>
-        </svg>
-        <svg class="balon-animado" width="60" height="36" viewBox="0 0 100 60">
-            <defs>
-                <linearGradient id="cueroBalon" x1="10%" y1="10%" x2="90%" y2="90%">
-                    <stop offset="0%" stop-color="#9C5A2E"/>
-                    <stop offset="45%" stop-color="#6B3A1B"/>
-                    <stop offset="100%" stop-color="#3D1F0E"/>
-                </linearGradient>
-            </defs>
-            <ellipse cx="50" cy="30" rx="47" ry="21" fill="url(#cueroBalon)" stroke="#2A1508" stroke-width="2"/>
-            <ellipse cx="38" cy="20" rx="14" ry="6" fill="#B87A46" opacity="0.35"/>
-            <line x1="28" y1="30" x2="72" y2="30" stroke="#EFE6D8" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="36" y1="23" x2="36" y2="37" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
-            <line x1="43" y1="21" x2="43" y2="39" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
-            <line x1="50" y1="20" x2="50" y2="40" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
-            <line x1="57" y1="21" x2="57" y2="39" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
-            <line x1="64" y1="23" x2="64" y2="37" stroke="#EFE6D8" stroke-width="2" stroke-linecap="round"/>
+            <image href="{LOGO_ESCUDO_URL}" x="535" y="112" width="130" height="130"/>
         </svg>
     </div>
     """), unsafe_allow_html=True)
