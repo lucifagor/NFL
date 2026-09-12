@@ -139,15 +139,15 @@ def inyectar_estilos():
         margin-bottom: 12px; scrollbar-width: thin;
     }
     .ticker-juego {
-        flex: 0 0 auto; background: #E9EBE8; border: 1px solid #D2D6D0;
-        border-radius: 6px; padding: 8px 14px; min-width: 170px; max-width: 210px;
+        flex: 0 0 auto; background: #C6CBC3; border: 1px solid #AEB4A9;
+        border-radius: 6px; padding: 6px 10px; min-width: 140px; max-width: 170px;
     }
-    .ticker-equipo { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .ticker-equipo { display:flex; align-items:center; justify-content:flex-start; gap:6px; }
     .ticker-equipo img { width:20px; height:20px; }
-    .ticker-abbr { font-weight:700; font-size:0.85rem; color:#14241A; }
+    .ticker-abbr { font-weight:700; font-size:0.85rem; color:#14241A; margin-right:auto; }
     .ticker-score { font-weight:700; font-size:0.85rem; color:#C97A2E; }
     .ticker-estado { font-size:0.7rem; color:#1F241E; text-align:center; margin-top:4px; line-height:1.3; white-space:normal; }
-    .ticker-estadio { font-size:0.65rem; color:#5B6B60; text-align:center; margin-top:1px; line-height:1.3; white-space:normal; }
+    .ticker-estadio { font-size:0.65rem; color:#3E4A42; font-weight:600; text-align:center; margin-top:1px; line-height:1.3; white-space:normal; }
     </style>
     """), unsafe_allow_html=True)
 
@@ -180,10 +180,12 @@ def ticker_marcadores(partidos: list):
         if p["estado"] in ("FT", "AOT"):
             linea1 = "Final" if p["estado"] == "FT" else "Final (OT)"
             linea2 = ""
+            linea3 = ""
         else:
             fecha_hora = " · ".join(x for x in [_fecha_corta(p["fecha"]) if p.get("fecha") else "", p.get("hora", "")] if x)
             linea1 = fecha_hora or "Por confirmar"
             linea2 = p.get("estadio", "")
+            linea3 = p.get("ciudad", "")
         tarjetas += f"""
         <div class="ticker-juego">
             <div class="ticker-equipo">
@@ -196,6 +198,7 @@ def ticker_marcadores(partidos: list):
             </div>
             <div class="ticker-estado">{linea1}</div>
             {f'<div class="ticker-estadio">{linea2}</div>' if linea2 else ''}
+            {f'<div class="ticker-estadio">{linea3}</div>' if linea3 else ''}
         </div>"""
     st.markdown(_sin_sangria(f'<div class="ticker-marcadores">{tarjetas}</div>'), unsafe_allow_html=True)
 
@@ -474,7 +477,7 @@ def marcadores_cacheados(season: int, api_key: str = ""):
             "away_score": p["away_score"] if p["away_score"] not in ("-", "", None) else None,
             "home_score": p["home_score"] if p["home_score"] not in ("-", "", None) else None,
             "estado": "FT" if "final" in p.get("estado", "").lower() else "NS",
-            "fecha": p.get("fecha", ""), "hora": "", "estadio": "",
+            "fecha": p.get("fecha", ""), "hora": "", "estadio": "", "ciudad": "",
         }
         for p in crudo
     ]

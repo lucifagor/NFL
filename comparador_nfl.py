@@ -729,9 +729,6 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
         scores = j.get("scores") or {}
         estado = ((j.get("game") or {}).get("status") or {}).get("short", "NS")
         venue = (j.get("game") or {}).get("venue") or {}
-        estadio = venue.get("name", "")
-        if venue.get("city"):
-            estadio = f"{estadio}, {venue['city']}" if estadio else venue["city"]
         resultado.append({
             "away_abbr": _abbr_desde_nombre_api_sports(away.get("name", "")),
             "home_abbr": _abbr_desde_nombre_api_sports(home.get("name", "")),
@@ -740,7 +737,8 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
             "estado": estado,
             "fecha": (j.get("game") or {}).get("date", {}).get("date", ""),
             "hora": (j.get("game") or {}).get("date", {}).get("time", ""),
-            "estadio": estadio,
+            "estadio": venue.get("name", ""),
+            "ciudad": venue.get("city", ""),
         })
     return resultado
 
