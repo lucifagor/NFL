@@ -62,6 +62,10 @@ WEIGHTS = {
     "lesiones": 2,  # negativo si hay bajas clave
     "clima": 1,          # ventaja para el equipo acostumbrado a esas condiciones
     "linea_apuestas": 2,  # a favor del equipo favorito por el mercado
+    "qb1_desempeno": 4,   # producción del quarterback titular (yardas+TD de pase, menos INT)
+    "rb1_desempeno": 3,   # producción del corredor titular (yardas de carrera por partido)
+    "wr1_desempeno": 3,   # producción del receptor abierto titular (yardas de recepción por partido)
+    "te1_desempeno": 2,   # producción del ala cerrada titular (yardas de recepción por partido)
 }
 
 HOME_FIELD_BONUS = 1.5  # puntos extra fijos para el equipo local
@@ -185,6 +189,145 @@ def obtener_stats_combinadas(season_actual: int, temporadas_historicas: int = 2)
     stats.attrs["temporadas_usadas"] = [t for t in temporadas if t not in fallidas]
     stats.attrs["temporadas_faltantes"] = fallidas
     return stats
+
+
+# ---------------------------------------------------------------------------
+# 2a-bis. DESEMPEÑO DE JUGADORES CLAVE (QB1 / RB1 / WR1 / TE1) POR EQUIPO
+# ---------------------------------------------------------------------------
+def obtener_jugadores_clave(season_actual: int, temporadas_historicas: int = 0) -> pd.DataFrame:
+    """
+    Identifica al jugador titular (el de mayor producción) en QB, RB, WR y
+    TE de cada equipo, y devuelve sus estadísticas clave normalizadas a
+    PROMEDIO POR PARTIDO — para usarlas como parámetros adicionales del
+    modelo junto a las estadísticas de equipo.
+
+    "Titular" se define de forma simple: el jugador de esa posición con más
+    yardas de producción en su especialidad (pase para QB, carrera para RB,
+    recepción para WR/TE) en el rango de temporadas pedido. No usa datos de
+    lesiones/roster oficial, así que si un titular se lesionó a media
+    temporada, puede seguir apareciendo como "titular" según su volumen
+    acumulado — es una limitación conocida de este enfoque simple.
+
+    Columnas devueltas (una fila por equipo):
+        team, qb1_nombre, qb1_yardas_pase_pg, qb1_td_pase_pg, qb1_int_pg,
+        rb1_nombre, rb1_yardas_carrera_pg, rb1_td_carrera_pg,
+        wr1_nombre, wr1_yardas_recepcion_pg, wr1_td_recepcion_pg,
+        te1_nombre, te1_yardas_recepcion_pg, te1_td_recepcion_pg
+    """
+    if not NFL_DATA_PY_OK:
+        raise RuntimeError("nfl_data_py no disponible")
+
+    temporadas = (
+        list(range(season_actual - temporadas_historicas, season_actual + 1))
+        if temporadas_historicas > 0 else [season_actual]
+    )
+
+    datos = nfl.import_seasonal_data(temporadas)
+    if datos is None or datos.empty:
+        raise ValueError(f"No hay estadísticas de jugadores disponibles para {temporadas}.")
+
+    try:
+        roster = nfl.import_seasonal_rosters(temporadas)[["player_id", "player_name", "position", "team"]]
+        roster = roster.drop_duplicates("player_id")
+    except Exception as e:
+        raise ValueError(f"No se pudo obtener el roster de jugadores: {e}")
+
+    datos = datos.merge(roster, on="player_id", how="left")
+    if "team" not in datos.columns or datos["team"].isna().all():
+        raise ValueError("No se pudo cruzar jugadores con su equipo (roster incompleto).")
+
+    columnas_deseadas = [
+        "passing_yards", "passing_tds", "interceptions",
+        "rushing_yards", "rushing_tds",
+        "receiving_yards", "receiving_tds",
+        "games",
+    ]
+    columnas_disponibles = [c for c in columnas_deseadas if c in datos.columns]
+    if "games" not in columnas_disponibles:
+        datos["games"] = 1  # fallback: si no viene "games", trata cada fila como 1 partido
+        columnas_disponibles.append("games")
+
+    agregado = (
+        datos.groupby(["player_id", "player_name", "position", "team"])[columnas_disponibles]
+        .sum().reset_index()
+    )
+    agregado["games"] = agregado["games"].replace(0, 1)
+
+    def top_jugador(equipo_df: pd.DataFrame, posicion: str, columna_orden: str):
+        sub = equipo_df[equipo_df["position"] == posicion]
+        if sub.empty or columna_orden not in sub.columns:
+            return None
+        sub = sub.sort_values(columna_orden, ascending=False)
+        return sub.iloc[0]
+
+    filas = []
+    for team in sorted(agregado["team"].dropna().unique()):
+        equipo_df = agregado[agregado["team"] == team]
+        fila = {"team": team}
+
+        qb1 = top_jugador(equipo_df, "QB", "passing_yards")
+        if qb1 is not None:
+            juegos = qb1.get("games", 1) or 1
+            fila["qb1_nombre"] = qb1.get("player_name")
+            fila["qb1_yardas_pase_pg"] = qb1.get("passing_yards", 0) / juegos
+            fila["qb1_td_pase_pg"] = qb1.get("passing_tds", 0) / juegos
+            fila["qb1_int_pg"] = qb1.get("interceptions", 0) / juegos
+        else:
+            fila.update({"qb1_nombre": None, "qb1_yardas_pase_pg": 0.0, "qb1_td_pase_pg": 0.0, "qb1_int_pg": 0.0})
+
+        rb1 = top_jugador(equipo_df, "RB", "rushing_yards")
+        if rb1 is not None:
+            juegos = rb1.get("games", 1) or 1
+            fila["rb1_nombre"] = rb1.get("player_name")
+            fila["rb1_yardas_carrera_pg"] = rb1.get("rushing_yards", 0) / juegos
+            fila["rb1_td_carrera_pg"] = rb1.get("rushing_tds", 0) / juegos
+        else:
+            fila.update({"rb1_nombre": None, "rb1_yardas_carrera_pg": 0.0, "rb1_td_carrera_pg": 0.0})
+
+        wr1 = top_jugador(equipo_df, "WR", "receiving_yards")
+        if wr1 is not None:
+            juegos = wr1.get("games", 1) or 1
+            fila["wr1_nombre"] = wr1.get("player_name")
+            fila["wr1_yardas_recepcion_pg"] = wr1.get("receiving_yards", 0) / juegos
+            fila["wr1_td_recepcion_pg"] = wr1.get("receiving_tds", 0) / juegos
+        else:
+            fila.update({"wr1_nombre": None, "wr1_yardas_recepcion_pg": 0.0, "wr1_td_recepcion_pg": 0.0})
+
+        te1 = top_jugador(equipo_df, "TE", "receiving_yards")
+        if te1 is not None:
+            juegos = te1.get("games", 1) or 1
+            fila["te1_nombre"] = te1.get("player_name")
+            fila["te1_yardas_recepcion_pg"] = te1.get("receiving_yards", 0) / juegos
+            fila["te1_td_recepcion_pg"] = te1.get("receiving_tds", 0) / juegos
+        else:
+            fila.update({"te1_nombre": None, "te1_yardas_recepcion_pg": 0.0, "te1_td_recepcion_pg": 0.0})
+
+        filas.append(fila)
+
+    jugadores = pd.DataFrame(filas)
+
+    # Puntajes compuestos simples (yardas + valor de TD, menos INT para el QB)
+    # — el "20" es un equivalente aproximado de cuántas yardas vale un TD,
+    # heurística común usada en scoring tipo fantasy football.
+    jugadores["qb1_desempeno_score"] = (
+        jugadores["qb1_yardas_pase_pg"] + jugadores["qb1_td_pase_pg"] * 20 - jugadores["qb1_int_pg"] * 25
+    )
+    jugadores["rb1_desempeno_score"] = jugadores["rb1_yardas_carrera_pg"] + jugadores["rb1_td_carrera_pg"] * 20
+    jugadores["wr1_desempeno_score"] = jugadores["wr1_yardas_recepcion_pg"] + jugadores["wr1_td_recepcion_pg"] * 20
+    jugadores["te1_desempeno_score"] = jugadores["te1_yardas_recepcion_pg"] + jugadores["te1_td_recepcion_pg"] * 20
+
+    return jugadores
+
+
+def combinar_stats_con_jugadores(stats: pd.DataFrame, jugadores: pd.DataFrame) -> pd.DataFrame:
+    """Une el DataFrame de estadísticas de equipo con el de jugadores clave
+    (por columna 'team'), rellenando con 0 los equipos sin datos de algún
+    jugador para que el modelo no truene por valores faltantes."""
+    combinado = stats.merge(jugadores, on="team", how="left")
+    columnas_numericas = [c for c in jugadores.columns if c != "team" and not c.endswith("_nombre")]
+    combinado[columnas_numericas] = combinado[columnas_numericas].fillna(0)
+    combinado.attrs.update(stats.attrs)
+    return combinado
 
 
 # ---------------------------------------------------------------------------
@@ -433,35 +576,68 @@ def obtener_marcadores_actuales() -> list:
         return [{"error": str(e)}]
 
 
-def obtener_standings() -> pd.DataFrame:
-    """Devuelve la tabla de posiciones actual (equipo, victorias, derrotas,
-    empates, división) según ESPN."""
-    try:
-        r = requests.get(ESPN_STANDINGS_URL, timeout=10)
-        r.raise_for_status()
-        data = r.json()
+_DIVISIONES_NFL = {
+    "BUF": ("AFC", "AFC Este"), "MIA": ("AFC", "AFC Este"), "NE": ("AFC", "AFC Este"), "NYJ": ("AFC", "AFC Este"),
+    "BAL": ("AFC", "AFC Norte"), "CIN": ("AFC", "AFC Norte"), "CLE": ("AFC", "AFC Norte"), "PIT": ("AFC", "AFC Norte"),
+    "HOU": ("AFC", "AFC Sur"), "IND": ("AFC", "AFC Sur"), "JAX": ("AFC", "AFC Sur"), "TEN": ("AFC", "AFC Sur"),
+    "DEN": ("AFC", "AFC Oeste"), "KC": ("AFC", "AFC Oeste"), "LV": ("AFC", "AFC Oeste"), "LAC": ("AFC", "AFC Oeste"),
+    "DAL": ("NFC", "NFC Este"), "NYG": ("NFC", "NFC Este"), "PHI": ("NFC", "NFC Este"), "WAS": ("NFC", "NFC Este"),
+    "CHI": ("NFC", "NFC Norte"), "DET": ("NFC", "NFC Norte"), "GB": ("NFC", "NFC Norte"), "MIN": ("NFC", "NFC Norte"),
+    "ATL": ("NFC", "NFC Sur"), "CAR": ("NFC", "NFC Sur"), "NO": ("NFC", "NFC Sur"), "TB": ("NFC", "NFC Sur"),
+    "ARI": ("NFC", "NFC Oeste"), "LA": ("NFC", "NFC Oeste"), "SF": ("NFC", "NFC Oeste"), "SEA": ("NFC", "NFC Oeste"),
+}
 
-        filas = []
-        for conferencia in data.get("children", []):
-            nombre_conf = conferencia.get("name", "")
-            for entrada in conferencia.get("standings", {}).get("entries", []):
-                equipo = entrada.get("team", {})
-                stats = {s.get("name"): s.get("value") for s in entrada.get("stats", [])}
-                filas.append({
-                    "Conferencia": nombre_conf,
-                    "Equipo": equipo.get("displayName", "?"),
-                    "Abbr": equipo.get("abbreviation", "?"),
-                    "V": int(stats.get("wins", 0)),
-                    "D": int(stats.get("losses", 0)),
-                    "E": int(stats.get("ties", 0)),
-                    "% Victorias": round(stats.get("winPercent", 0) * 100, 1),
-                })
-        df = pd.DataFrame(filas)
-        if not df.empty:
-            df = df.sort_values(["Conferencia", "% Victorias"], ascending=[True, False]).reset_index(drop=True)
-        return df
-    except Exception as e:
-        raise ValueError(f"No se pudo obtener la tabla de posiciones: {e}")
+
+def obtener_standings(season: int) -> pd.DataFrame:
+    """
+    Calcula la tabla de posiciones (V-D-E por equipo) a partir de los
+    resultados de partidos YA JUGADOS de la temporada, usando el calendario
+    de nfl_data_py — no depende de ninguna API externa no documentada.
+    """
+    if not NFL_DATA_PY_OK:
+        raise RuntimeError("nfl_data_py no disponible")
+
+    sched = nfl.import_schedules([season])
+    if sched is None or sched.empty:
+        raise ValueError(f"No hay calendario disponible todavía para la temporada {season}.")
+
+    jugados = sched[sched["home_score"].notna() & sched["away_score"].notna()]
+    if jugados.empty:
+        raise ValueError(f"Todavía no se ha jugado ningún partido en la temporada {season}.")
+
+    registros = {}
+    for _, partido in jugados.iterrows():
+        home, away = partido["home_team"], partido["away_team"]
+        hs, aw = partido["home_score"], partido["away_score"]
+        for equipo in (home, away):
+            registros.setdefault(equipo, {"V": 0, "D": 0, "E": 0})
+
+        if hs > aw:
+            registros[home]["V"] += 1
+            registros[away]["D"] += 1
+        elif aw > hs:
+            registros[away]["V"] += 1
+            registros[home]["D"] += 1
+        else:
+            registros[home]["E"] += 1
+            registros[away]["E"] += 1
+
+    filas = []
+    for equipo, rec in registros.items():
+        total = rec["V"] + rec["D"] + rec["E"]
+        conferencia, division = _DIVISIONES_NFL.get(equipo, ("?", "?"))
+        filas.append({
+            "Conferencia": conferencia,
+            "División": division,
+            "Equipo": equipo,
+            "V": rec["V"], "D": rec["D"], "E": rec["E"],
+            "% Victorias": round((rec["V"] + 0.5 * rec["E"]) / total * 100, 1) if total else 0.0,
+        })
+
+    df = pd.DataFrame(filas)
+    if not df.empty:
+        df = df.sort_values(["Conferencia", "División", "% Victorias"], ascending=[True, True, False]).reset_index(drop=True)
+    return df
 
 
 def obtener_lideres_estadisticos(season: int, top_n: int = 5) -> dict:
@@ -667,6 +843,19 @@ def comparar_equipos(stats: pd.DataFrame, equipo_a: str, equipo_b: str,
         ("ataque_turnovers_cometidos", "turnovers_cometidos", True),  # menor es mejor
     ]
 
+    # Las columnas de jugadores clave solo se agregan a la comparación si
+    # están presentes en `stats` (es decir, si se combinó con
+    # combinar_stats_con_jugadores() antes de llamar a esta función).
+    comparaciones_jugadores = [
+        ("qb1_desempeno", "qb1_desempeno_score", False),
+        ("rb1_desempeno", "rb1_desempeno_score", False),
+        ("wr1_desempeno", "wr1_desempeno_score", False),
+        ("te1_desempeno", "te1_desempeno_score", False),
+    ]
+    for peso_key, columna, menor_es_mejor in comparaciones_jugadores:
+        if columna in stats.columns:
+            comparaciones.append((peso_key, columna, menor_es_mejor))
+
     for peso_key, columna, menor_es_mejor in comparaciones:
         peso = WEIGHTS.get(peso_key, 0)
         val_a, val_b = a[columna], b[columna]
@@ -680,10 +869,22 @@ def comparar_equipos(stats: pd.DataFrame, equipo_a: str, equipo_b: str,
         puntaje[equipo_a] += pts_a
         puntaje[equipo_b] += pts_b
 
+        # Para categorías de jugador clave (qb1/rb1/wr1/te1), muestra el
+        # nombre del jugador junto al valor si la columna existe.
+        prefijo_nombre = columna.replace("_desempeno_score", "_nombre")
+        etiqueta_a = val_a
+        etiqueta_b = val_b
+        if prefijo_nombre in stats.columns:
+            nombre_a, nombre_b = a.get(prefijo_nombre), b.get(prefijo_nombre)
+            if nombre_a:
+                etiqueta_a = f"{val_a:.1f} ({nombre_a})"
+            if nombre_b:
+                etiqueta_b = f"{val_b:.1f} ({nombre_b})"
+
         desglose.append({
             "categoria": peso_key, "peso": peso,
-            "equipo_a": equipo_a, "valor_a": val_a, "score_a": round(score_a, 1), "puntos_a": round(pts_a, 2),
-            "equipo_b": equipo_b, "valor_b": val_b, "score_b": round(score_b, 1), "puntos_b": round(pts_b, 2),
+            "equipo_a": equipo_a, "valor_a": etiqueta_a, "score_a": round(score_a, 1), "puntos_a": round(pts_a, 2),
+            "equipo_b": equipo_b, "valor_b": etiqueta_b, "score_b": round(score_b, 1), "puntos_b": round(pts_b, 2),
         })
 
     if local:

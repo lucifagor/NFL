@@ -25,6 +25,8 @@ import datetime
 from comparador_nfl import (
     obtener_stats_temporada,
     obtener_stats_combinadas,
+    obtener_jugadores_clave,
+    combinar_stats_con_jugadores,
     obtener_calendario_semana,
     obtener_proximos_partidos,
     obtener_clima_estadio,
@@ -70,11 +72,16 @@ def nombre_equipo(abbr: str) -> str:
 
 def avisar_temporadas_faltantes(stats: pd.DataFrame):
     """Si alguna temporada del combinado no se pudo descargar, avisa cuáles
-    sí se usaron en vez de fallar en silencio o tumbar todo el resultado."""
+    sí se usaron en vez de fallar en silencio o tumbar todo el resultado.
+    También avisa si no se pudo agregar el desempeño de jugadores clave."""
     faltantes = stats.attrs.get("temporadas_faltantes")
     usadas = stats.attrs.get("temporadas_usadas")
     if faltantes:
         st.caption(f"⚠️ No se encontraron datos para {faltantes} — se usaron solo {usadas}.")
+
+    error_jugadores = stats.attrs.get("jugadores_clave_error")
+    if error_jugadores:
+        st.caption(f"⚠️ No se pudo agregar el desempeño de jugadores clave (QB1/RB1/WR1/TE1): {error_jugadores}")
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -82,10 +89,24 @@ def stats_cacheadas(season: int, temporadas_historicas: int = 0) -> pd.DataFrame
     """Cachea las estadísticas 1 hora — evita re-descargar en cada partido.
     Si temporadas_historicas > 0, combina esa cantidad de temporadas previas
     completas + lo disponible de `season` (normalizado por partido).
-    Si es 0, usa solo `season` (comportamiento de una sola temporada)."""
+    Si es 0, usa solo `season` (comportamiento de una sola temporada).
+
+    También intenta agregar el desempeño de QB1/RB1/WR1/TE1 de cada equipo.
+    Si esa parte falla (cambios en nfl_data_py, datos faltantes, etc.), no
+    tumba la app — simplemente sigue sin esas columnas (el modelo las
+    ignora automáticamente si no están presentes)."""
     if temporadas_historicas > 0:
-        return obtener_stats_combinadas(season, temporadas_historicas)
-    return obtener_stats_temporada(season)
+        stats = obtener_stats_combinadas(season, temporadas_historicas)
+    else:
+        stats = obtener_stats_temporada(season)
+
+    try:
+        jugadores = obtener_jugadores_clave(season, temporadas_historicas)
+        stats = combinar_stats_con_jugadores(stats, jugadores)
+    except Exception as e:
+        stats.attrs["jugadores_clave_error"] = str(e)
+
+    return stats
 
 
 @st.cache_data(show_spinner=False, ttl=900)
@@ -99,8 +120,8 @@ def lesiones_liga_cacheadas(limite: int = 25):
 
 
 @st.cache_data(show_spinner=False, ttl=900)
-def standings_cacheados():
-    return obtener_standings()
+def standings_cacheados(season: int):
+    return obtener_standings(season)
 
 
 def ejecutar_comparacion(stats, equipo_a, equipo_b, local, usar_clima, usar_odds):
@@ -274,18 +295,25 @@ if st.session_state.pagina == "estadisticas":
         st.rerun()
 
     st.title("📊 Tabla de posiciones")
+    season_standings = st.number_input(
+        "Temporada", min_value=2015, max_value=2027,
+        value=datetime.date.today().year, key="season_standings",
+    )
     with st.spinner("Cargando tabla de posiciones..."):
         try:
-            standings = standings_cacheados()
+            standings = standings_cacheados(season_standings)
             if standings.empty:
                 st.info("No se pudo cargar la tabla de posiciones.")
             else:
-                for conf in standings["Conferencia"].unique():
+                for conf in sorted(standings["Conferencia"].unique()):
                     st.subheader(conf)
-                    st.dataframe(
-                        standings[standings["Conferencia"] == conf].drop(columns=["Conferencia"]),
-                        use_container_width=True, hide_index=True,
-                    )
+                    conf_df = standings[standings["Conferencia"] == conf]
+                    for div in sorted(conf_df["División"].unique()):
+                        st.markdown(f"**{div}**")
+                        st.dataframe(
+                            conf_df[conf_df["División"] == div].drop(columns=["Conferencia", "División"]),
+                            use_container_width=True, hide_index=True,
+                        )
         except Exception as e:
             st.error(f"No se pudo cargar la tabla de posiciones: {e}")
 
