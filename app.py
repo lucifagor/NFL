@@ -123,14 +123,29 @@ def inyectar_estilos():
     /* Sidebar con borde sutil */
     [data-testid="stSidebar"] { border-right: 1px solid #26402F; }
 
-    /* Franja de "campo cortado" — línea de yarda diagonal repetida */
+    /* Banner de "campo cortado" con diagonales — el balón vuela sobre él */
     .franja-campo {
-        height: 10px;
+        height: 64px;
         background: repeating-linear-gradient(
             -45deg, #1F6B3A, #1F6B3A 10px, #2A8449 10px, #2A8449 20px
         );
         border-bottom: 2px solid #F2994A;
         margin: -1rem -1rem 1rem -1rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .balon-animado {
+        position: absolute; left: 50%; top: 50%; font-size: 2.4rem;
+        transform: translate(250%, -50%) rotate(25deg);
+        animation: volar-balon 1.3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+        animation-delay: 0.25s;
+        filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));
+    }
+    @keyframes volar-balon {
+        0%   { transform: translate(250%, -50%) rotate(35deg); opacity: 0; }
+        20%  { opacity: 1; }
+        75%  { transform: translate(-40%, -50%) rotate(-8deg); }
+        100% { transform: translate(-50%, -50%) rotate(0deg); }
     }
 
     /* Ticker de marcadores — scroll horizontal */
@@ -155,8 +170,10 @@ def inyectar_estilos():
 
 
 def franja_campo():
-    """Franja decorativa delgada tipo línea de yarda cortada, arriba de todo."""
-    st.markdown('<div class="franja-campo"></div>', unsafe_allow_html=True)
+    """Banner decorativo tipo campo con diagonales, con el balón volando
+    desde la derecha hasta quedar al centro (animación de una sola vez al
+    cargar la página)."""
+    st.markdown('<div class="franja-campo"><span class="balon-animado">🏈</span></div>', unsafe_allow_html=True)
 
 
 _MESES_ES = {1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
