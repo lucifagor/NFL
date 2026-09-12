@@ -171,34 +171,35 @@ def nombre_equipo(abbr: str) -> str:
     return f"{NOMBRES_EQUIPO.get(abbr, abbr)} ({abbr})"
 
 
-def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color: str) -> str:
+def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header: str, color_borde: str) -> str:
     """Genera una tabla de una división al estilo gráfico de transmisión
-    deportiva: franja de color, logo, nombre completo, G-P-E-%."""
+    deportiva: sub-encabezado en tono claro, filas oscuras, borde de color
+    alrededor de toda la división (calcado del formato de referencia)."""
     filas_html = ""
     for _, row in filas.iterrows():
         pct = row["% Victorias"] / 100
-        pct_txt = "-" if (row["V"] + row["D"] + row["E"]) == 0 else f"{pct:.3f}".lstrip("0")
+        pct_txt = "-" if row["V"] == 0 else f"{pct:.3f}".lstrip("0")
         filas_html += f"""
-        <tr style="border-bottom: 1px solid #1C2333;">
-            <td style="padding:6px 4px; width:30px;"><img src="{logo_url(row['Equipo'])}" width="22" style="vertical-align:middle;"></td>
-            <td style="padding:6px 8px; font-weight:600; color:#F1F4F9;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
-            <td style="text-align:center; color:#C7CEDA;">{row['V']}</td>
-            <td style="text-align:center; color:#C7CEDA;">{row['D']}</td>
-            <td style="text-align:center; color:#C7CEDA;">{row['E']}</td>
-            <td style="text-align:center; color:#C7CEDA; font-weight:600;">{pct_txt}</td>
+        <tr>
+            <td style="padding:6px 6px; width:30px; background:#0E1B33;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
+            <td style="padding:6px 8px; font-weight:700; color:#F5F7FA; white-space:nowrap; background:#0E1B33;">{NOMBRES_EQUIPO.get(row['Equipo'], row['Equipo'])}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#0E1B33;">{row['V']}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#0E1B33;">{row['D']}</td>
+            <td style="text-align:center; color:#E4E8EF; background:#0E1B33;">{row['E']}</td>
+            <td style="text-align:center; color:#E4E8EF; font-weight:600; background:#0E1B33;">{pct_txt}</td>
         </tr>"""
 
     return _sin_sangria(f"""
-    <table style="width:100%; border-collapse:collapse; margin-bottom:16px;
-                   font-family:'Inter',sans-serif; background:#141B2B;
-                   border-radius:8px; overflow:hidden; border:1px solid #1C2333;">
-        <tr style="background:{color};">
-            <td colspan="2" style="padding:8px 8px; color:white; font-weight:700;
-                font-family:'Barlow Condensed',sans-serif; font-size:1.05rem;">{nombre_division}</td>
-            <td style="text-align:center; color:white; font-weight:600; width:26px; font-size:0.8rem;">G</td>
-            <td style="text-align:center; color:white; font-weight:600; width:26px; font-size:0.8rem;">P</td>
-            <td style="text-align:center; color:white; font-weight:600; width:26px; font-size:0.8rem;">E</td>
-            <td style="text-align:center; color:white; font-weight:600; width:44px; font-size:0.8rem;">PCT</td>
+    <table style="width:100%; border-collapse:collapse; margin-bottom:18px;
+                   font-family:'Inter',sans-serif;
+                   border-radius:4px; overflow:hidden; border:2px solid {color_borde};">
+        <tr style="background:{color_header};">
+            <td colspan="2" style="padding:6px 8px; color:white; font-weight:700;
+                font-family:'Barlow Condensed',sans-serif; font-size:1rem;">{nombre_division}</td>
+            <td style="text-align:center; color:white; font-weight:700; width:26px; font-size:0.8rem;">G</td>
+            <td style="text-align:center; color:white; font-weight:700; width:26px; font-size:0.8rem;">P</td>
+            <td style="text-align:center; color:white; font-weight:700; width:26px; font-size:0.8rem;">E</td>
+            <td style="text-align:center; color:white; font-weight:700; width:44px; font-size:0.8rem;">.PCT</td>
         </tr>
         {filas_html}
     </table>
@@ -459,29 +460,33 @@ if st.session_state.pagina == "estadisticas":
                 if API_SPORTS_KEY and "PF" in standings.columns:
                     st.caption("📡 Datos oficiales en tiempo real vía API-Sports")
 
-                col_afc, col_nfc = st.columns(2)
-
                 st.markdown(_sin_sangria("""
                 <style>
-                .banda-conf { padding: 10px; border-radius: 6px; text-align: center;
+                .banda-conf { padding: 12px; text-align: center;
                     font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
-                    font-size: 1.3rem; color: white; margin-bottom: 8px; }
+                    font-size: 1.5rem; color: white; margin-bottom: 10px; }
+                .emblema-nfl { position: sticky; top: 40%; text-align: center; font-size: 3rem; }
                 </style>
                 """), unsafe_allow_html=True)
 
+                col_afc, col_centro, col_nfc = st.columns([5, 1, 5])
+
                 with col_afc:
-                    st.markdown('<div class="banda-conf" style="background:#C8102E;">AFC</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="banda-conf" style="background:#C8102E;">AFC Football Conference</div>', unsafe_allow_html=True)
                     afc_df = standings[standings["Conferencia"] == "AFC"]
                     for div in sorted(afc_df["División"].unique()):
                         filas = afc_df[afc_df["División"] == div].sort_values("% Victorias", ascending=False)
-                        st.markdown(tabla_division_html(div, filas, "#C8102E"), unsafe_allow_html=True)
+                        st.markdown(tabla_division_html(div, filas, "#DB8F6E", "#C8102E"), unsafe_allow_html=True)
+
+                with col_centro:
+                    st.markdown('<div class="emblema-nfl">🏈</div>', unsafe_allow_html=True)
 
                 with col_nfc:
-                    st.markdown('<div class="banda-conf" style="background:#013369;">NFC</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="banda-conf" style="background:#1D4E8F;">NFC Football Conference</div>', unsafe_allow_html=True)
                     nfc_df = standings[standings["Conferencia"] == "NFC"]
                     for div in sorted(nfc_df["División"].unique()):
                         filas = nfc_df[nfc_df["División"] == div].sort_values("% Victorias", ascending=False)
-                        st.markdown(tabla_division_html(div, filas, "#013369"), unsafe_allow_html=True)
+                        st.markdown(tabla_division_html(div, filas, "#AEC2E0", "#1D4E8F"), unsafe_allow_html=True)
         except Exception as e:
             st.error(f"No se pudo cargar la tabla de posiciones: {e}")
 
