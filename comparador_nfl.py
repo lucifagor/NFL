@@ -671,13 +671,17 @@ def obtener_equipos_api_sports(api_key: str, season: int) -> dict:
 
 def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
     """
-    Marcadores de la semana más cercana a hoy (la que se está jugando o la
-    próxima) vía API-Sports. Trae toda la temporada en 1 sola consulta y
-    filtra la semana más próxima, para no gastar cuota pidiendo semana por
-    semana.
+    Marcadores de la jornada (semana) actual vía API-Sports. Se queda en
+    una jornada hasta UN DÍA DESPUÉS de su último partido — al día
+    siguiente de ese margen, salta sola a la próxima jornada. Trae toda
+    la temporada en 1 sola consulta y filtra en memoria, para no gastar
+    cuota pidiendo semana por semana.
     """
     data = _api_sports_get(api_key, "/games", {"league": API_SPORTS_LEAGUE_NFL, "season": season})
     juegos = data.get("response", [])
+    # Solo temporada regular — descarta pretemporada (por eso salían
+    # combinaciones raras de equipos con "Final" fuera de lugar).
+    juegos = [j for j in juegos if "regular" in ((j.get("game") or {}).get("stage") or "").lower()]
     if not juegos:
         return []
 
@@ -689,8 +693,33 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
         except Exception:
             return hoy
 
-    semana_actual = min(juegos, key=lambda j: abs((_fecha(j) - hoy).days))["game"].get("week")
-    de_esta_semana = [j for j in juegos if j["game"].get("week") == semana_actual]
+    # Rango de fechas (primer y último partido) de cada jornada.
+    semanas = {}
+    for j in juegos:
+        semana = (j.get("game") or {}).get("week")
+        f = _fecha(j)
+        if semana not in semanas:
+            semanas[semana] = {"min": f, "max": f}
+        else:
+            semanas[semana]["min"] = min(semanas[semana]["min"], f)
+            semanas[semana]["max"] = max(semanas[semana]["max"], f)
+
+    # Semanas en orden cronológico (por su fecha de inicio).
+    orden_semanas = sorted(semanas.keys(), key=lambda s: semanas[s]["min"])
+    if not orden_semanas:
+        return []
+
+    # La jornada actual es la primera (en orden) cuyo margen de un día
+    # después de su último partido todavía no se cumple. Si ya pasaron
+    # todas, se queda en la última (temporada terminada).
+    semana_actual = orden_semanas[-1]
+    for semana in orden_semanas:
+        limite_con_gracia = semanas[semana]["max"] + datetime.timedelta(days=1)
+        if hoy <= limite_con_gracia:
+            semana_actual = semana
+            break
+
+    de_esta_semana = [j for j in juegos if (j.get("game") or {}).get("week") == semana_actual]
     de_esta_semana.sort(key=_fecha)
 
     resultado = []

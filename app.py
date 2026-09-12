@@ -280,6 +280,17 @@ def barra_navegacion(activo: str):
     st.markdown('<hr style="border-color:#223255; margin-top:0;">', unsafe_allow_html=True)
 
 
+def encabezado_sitio(activo: str):
+    """Encabezado compartido por TODA la app: franja de campo, menú de
+    navegación, y el ticker de marcadores de la semana actual — se ve
+    igual arriba de cualquier pantalla en la que estés."""
+    franja_campo()
+    barra_navegacion(activo)
+    with st.spinner("Cargando marcadores..."):
+        partidos_ticker = marcadores_cacheados(datetime.date.today().year, api_key=API_SPORTS_KEY)
+    ticker_marcadores(partidos_ticker)
+
+
 inyectar_estilos()
 
 EQUIPOS = [
@@ -557,13 +568,8 @@ if not NFL_DATA_PY_OK:
 # PANTALLA: INICIO — solo noticias y lesiones recientes de la liga
 # ============================================================
 if st.session_state.pagina == "inicio":
-    franja_campo()
-    barra_navegacion("inicio")
+    encabezado_sitio("inicio")
     marca_completa()
-
-    with st.spinner("Cargando marcadores..."):
-        partidos_ticker = marcadores_cacheados(datetime.date.today().year, api_key=API_SPORTS_KEY)
-    ticker_marcadores(partidos_ticker)
 
     st.divider()
     hero("Noticias", "Lo último de la liga, antes de ver los pronósticos.")
@@ -616,7 +622,7 @@ if st.session_state.pagina == "inicio":
 # PANTALLA: ESTADÍSTICAS — tabla de posiciones de la liga
 # ============================================================
 if st.session_state.pagina == "estadisticas":
-    barra_navegacion("estadisticas")
+    encabezado_sitio("estadisticas")
     hero("Tabla de posiciones")
     season_standings = st.number_input(
         "Temporada", min_value=2015, max_value=2027,
@@ -680,6 +686,7 @@ if st.session_state.pagina == "estadisticas":
 # completo" en una lista de partidos)
 # ============================================================
 if st.session_state.pagina == "detalle":
+    encabezado_sitio("pronosticos")
     ctx = st.session_state.get("detalle_partido")
     if st.button("← Volver a pronósticos"):
         st.session_state.pagina = "pronosticos"
@@ -690,7 +697,6 @@ if st.session_state.pagina == "detalle":
         st.stop()
 
     away, home, season, temp_hist = ctx["away"], ctx["home"], ctx["season"], ctx["temporadas_historicas"]
-    marca_compacta()
     hero(f"{nombre_equipo(away)} @ {nombre_equipo(home)}")
 
     with st.spinner("Cargando detalle..."):
@@ -715,7 +721,7 @@ if st.session_state.pagina == "detalle":
 # PANTALLA: FANTASY (en construcción)
 # ============================================================
 if st.session_state.pagina == "fantasy":
-    barra_navegacion("fantasy")
+    encabezado_sitio("fantasy")
     hero("Fantasy", "Próximamente.")
     st.info(
         "Todavía no hay nada armado aquí — dime qué te gustaría ver "
@@ -728,7 +734,7 @@ if st.session_state.pagina == "fantasy":
 # ============================================================
 # PANTALLA: PRONÓSTICOS (lo que antes era la app completa)
 # ============================================================
-barra_navegacion("pronosticos")
+encabezado_sitio("pronosticos")
 hero("Comparador de equipos", "Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.")
 
 # --- Barra lateral: pesos del modelo (compartidos por las tres pestañas) ---
