@@ -467,15 +467,28 @@ def nombre_equipo(abbr: str) -> str:
 
 
 def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header: str, color_borde: str) -> str:
-    """Genera una tabla de una división: fondo blanco uniforme en toda la
-    caja (incluido el marco de color), líneas punteadas horizontales
-    entre equipos, encabezados grandes en negritas, texto negro en todas
-    partes, borde de color redondeado alrededor de toda la división.
-    Incluye G/P/E/%/PF/PC/Loc./Vis./Racha."""
+    """Genera una tabla de una división usando divs (CSS Grid) en vez de
+    <table> — así la línea punteada entre equipos es un border-bottom de
+    div normal, el mismo mecanismo confiable que ya usa el marco de
+    color exterior, en vez de bordes de celda con border-collapse (poco
+    confiable entre navegadores). Fondo blanco uniforme, encabezados
+    grandes en negritas, texto negro. Incluye G/P/E/%/PF/PC/Loc./Vis./Racha."""
     BLANCO = "#FFFFFF"
     NEGRO = "#14241A"
     PUNTEADO = "1.5px dotted #8B9187"
     tiene_extra = "PF" in filas.columns
+
+    columnas_extra = " 48px 48px 48px 48px 74px" if tiene_extra else ""
+    grid_cols = f"42px 1fr 46px 46px 46px 72px{columnas_extra}"
+
+    def _celda(contenido, extra_estilo=""):
+        return f'<div style="text-align:center; color:{NEGRO}; {extra_estilo}">{contenido}</div>'
+
+    encabezado_extra = ""
+    if tiene_extra:
+        for c in ["PF", "PC", "Loc.", "Vis."]:
+            encabezado_extra += _celda(c, "font-weight:700; font-size:0.95rem;")
+        encabezado_extra += _celda("Racha", "font-weight:700; font-size:0.95rem; padding-right:10px;")
 
     filas_html = ""
     for _, row in filas.iterrows():
@@ -483,53 +496,38 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         pct_txt = "-" if row["V"] == 0 else f"{pct:.3f}".lstrip("0")
         extra_html = ""
         if tiene_extra:
-            extra_html = f"""
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO};">{row.get('PF', '')}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO};">{row.get('PC', '')}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO};">{row.get('Loc', '')}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO};">{row.get('Vis', '')}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO}; padding-right:10px;">{row.get('Racha', '')}</td>"""
+            extra_html = (
+                _celda(row.get("PF", ""), "font-size:0.85rem;")
+                + _celda(row.get("PC", ""), "font-size:0.85rem;")
+                + _celda(row.get("Loc", ""), "font-size:0.85rem;")
+                + _celda(row.get("Vis", ""), "font-size:0.85rem;")
+                + _celda(row.get("Racha", ""), "font-size:0.85rem; padding-right:10px;")
+            )
         filas_html += f"""
-        <tr>
-            <td style="padding:6px 6px; background:{BLANCO}; border-bottom:{PUNTEADO};"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
-            <td style="padding:8px 10px; font-weight:700; color:{NEGRO}; white-space:nowrap; background:{BLANCO}; font-size:1rem; border-bottom:{PUNTEADO};">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; border-bottom:{PUNTEADO};">{row['V']}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; border-bottom:{PUNTEADO};">{row['D']}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; border-bottom:{PUNTEADO};">{row['E']}</td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:600; background:{BLANCO}; white-space:nowrap; border-bottom:{PUNTEADO};">{pct_txt}</td>
+        <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center;
+             background:{BLANCO}; border-bottom:{PUNTEADO}; padding:6px 0;">
+            <div style="text-align:center;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></div>
+            <div style="padding:0 10px; font-weight:700; color:{NEGRO}; white-space:nowrap; font-size:1rem;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</div>
+            {_celda(row['V'])}
+            {_celda(row['D'])}
+            {_celda(row['E'])}
+            {_celda(pct_txt, "font-weight:600;")}
             {extra_html}
-        </tr>"""
-
-    columnas_extra_header = ""
-    colgroup_extra = ""
-    if tiene_extra:
-        columnas_extra_header = "".join(
-            f'<td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">{c}</td>'
-            for c in ["PF", "PC", "Loc.", "Vis."]
-        )
-        columnas_extra_header += f'<td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap; padding-right:10px;">Racha</td>'
-        colgroup_extra = "".join('<col style="width:48px;">' for _ in range(4))
-        colgroup_extra += '<col style="width:74px;">'
+        </div>"""
 
     return _sin_sangria(f"""
     <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; min-width:420px; background:{BLANCO};">
-    <table style="width:100%; border-collapse:collapse; font-family:'Inter',sans-serif; table-layout:fixed; background:{BLANCO};">
-        <colgroup>
-            <col style="width:42px;"><col><col style="width:46px;">
-            <col style="width:46px;"><col style="width:46px;"><col style="width:72px;">
-            {colgroup_extra}
-        </colgroup>
-        <tr style="background:{BLANCO};">
-            <td colspan="2" style="padding:8px 10px; color:{NEGRO}; font-weight:700; white-space:nowrap;
-                font-family:'Barlow Condensed',sans-serif; font-size:1.15rem;">{nombre_division}</td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">G</td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">P</td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">E</td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">.PCT</td>
-            {columnas_extra_header}
-        </tr>
+        <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center;
+             background:{BLANCO}; padding:8px 0;">
+            <div style="grid-column:1 / span 2; padding:0 10px; color:{NEGRO}; font-weight:700; white-space:nowrap;
+                font-family:'Barlow Condensed',sans-serif; font-size:1.15rem;">{nombre_division}</div>
+            {_celda("G", "font-weight:700; font-size:0.95rem;")}
+            {_celda("P", "font-weight:700; font-size:0.95rem;")}
+            {_celda("E", "font-weight:700; font-size:0.95rem;")}
+            {_celda(".PCT", "font-weight:700; font-size:0.95rem;")}
+            {encabezado_extra}
+        </div>
         {filas_html}
-    </table>
     </div>
     """)
 
@@ -564,13 +562,19 @@ def tabla_conferencia_agregada_html(nombre_conferencia: str, filas_division: pd.
                                       fila_total: pd.Series, color_borde: str, color_nombre: str) -> str:
     """Tabla de comparación por división dentro de una conferencia — cada
     renglón es una división completa (suma de sus 4 equipos), y al final
-    un renglón de TOTAL con la suma de toda la conferencia. Mismo
-    lenguaje visual que tabla_division_html (blanco, líneas punteadas,
-    encabezados grandes en negritas, texto negro, bordes redondeados)."""
+    un renglón de TOTAL con la suma de toda la conferencia. Usa divs
+    (CSS Grid) en vez de <table>, igual que tabla_division_html, para
+    que la línea punteada sea un border-bottom de div confiable."""
     BLANCO = "#FFFFFF"
     NEGRO = "#14241A"
     PUNTEADO = "1.5px dotted #8B9187"
     tiene_extra = "PF" in filas_division.columns
+
+    columnas_extra = " 56px 56px" if tiene_extra else ""
+    grid_cols = f"42px 1fr 46px 46px 46px 72px{columnas_extra}"
+
+    def _celda(contenido, extra_estilo=""):
+        return f'<div style="text-align:center; color:{NEGRO}; {extra_estilo}">{contenido}</div>'
 
     def _fila(nombre, row, es_total=False):
         pct = row["% Victorias"] / 100
@@ -580,51 +584,45 @@ def tabla_conferencia_agregada_html(nombre_conferencia: str, filas_division: pd.
         borde = "" if es_total else f"border-bottom:{PUNTEADO};"
         extra_html = ""
         if tiene_extra:
-            extra_html = f"""
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; font-weight:{peso}; {borde}">{int(row.get('PF', 0))}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; font-weight:{peso}; {borde} padding-right:14px;">{int(row.get('PC', 0))}</td>"""
+            extra_html = (
+                _celda(int(row.get("PF", 0)), f"font-size:0.85rem; font-weight:{peso};")
+                + _celda(int(row.get("PC", 0)), f"font-size:0.85rem; font-weight:{peso}; padding-right:14px;")
+            )
         return f"""
-        <tr>
-            <td colspan="2" style="padding:8px 10px; font-weight:{peso}; color:{NEGRO}; white-space:nowrap;
-                background:{BLANCO}; font-size:1rem; {borde}">{nombre}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-weight:{peso}; {borde}">{int(row['V'])}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-weight:{peso}; {borde}">{int(row['D'])}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-weight:{peso}; {borde}">{int(row['E'])}</td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:{peso}; background:{BLANCO}; white-space:nowrap; {borde}">{pct_txt}</td>
+        <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center;
+             background:{BLANCO}; {borde} padding:6px 0;">
+            <div style="grid-column:1 / span 2; padding:0 10px; font-weight:{peso}; color:{NEGRO}; white-space:nowrap; font-size:1rem;">{nombre}</div>
+            {_celda(int(row['V']), f"font-weight:{peso};")}
+            {_celda(int(row['D']), f"font-weight:{peso};")}
+            {_celda(int(row['E']), f"font-weight:{peso};")}
+            {_celda(pct_txt, f"font-weight:{peso};")}
             {extra_html}
-        </tr>"""
+        </div>"""
 
     filas_html = "".join(_fila(row["División"], row) for _, row in filas_division.iterrows())
     filas_html += _fila(f"Total {nombre_conferencia}", fila_total, es_total=True)
 
-    columnas_extra_header = ""
-    colgroup_extra = ""
+    encabezado_extra = ""
     if tiene_extra:
-        columnas_extra_header = f'<td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">PF</td>'
-        columnas_extra_header += f'<td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap; padding-right:14px;">PC</td>'
-        colgroup_extra = "".join('<col style="width:56px;">' for _ in range(2))
+        encabezado_extra = (
+            _celda("PF", "font-weight:700; font-size:0.95rem;")
+            + _celda("PC", "font-weight:700; font-size:0.95rem; padding-right:14px;")
+        )
 
     return _sin_sangria(f"""
     <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; min-width:420px; background:{BLANCO};">
-    <table style="width:100%; border-collapse:collapse; font-family:'Inter',sans-serif; table-layout:fixed; background:{BLANCO};">
-        <colgroup>
-            <col style="width:42px;"><col><col style="width:46px;">
-            <col style="width:46px;"><col style="width:46px;"><col style="width:72px;">
-            {colgroup_extra}
-        </colgroup>
-        <tr style="background:{BLANCO};">
-            <td colspan="2" style="padding:8px 10px; white-space:nowrap;">
+        <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center; background:{BLANCO}; padding:8px 0;">
+            <div style="grid-column:1 / span 2; padding:0 10px; white-space:nowrap;">
                 <span style="background:{color_nombre}; color:#FFFFFF; font-weight:700; padding:4px 12px;
                     border-radius:6px; font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; display:inline-block;">{nombre_conferencia}</span>
-            </td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">G</td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">P</td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">E</td>
-            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">.PCT</td>
-            {columnas_extra_header}
-        </tr>
+            </div>
+            {_celda("G", "font-weight:700; font-size:0.95rem;")}
+            {_celda("P", "font-weight:700; font-size:0.95rem;")}
+            {_celda("E", "font-weight:700; font-size:0.95rem;")}
+            {_celda(".PCT", "font-weight:700; font-size:0.95rem;")}
+            {encabezado_extra}
+        </div>
         {filas_html}
-    </table>
     </div>
     """)
 
