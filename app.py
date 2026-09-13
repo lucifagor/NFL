@@ -371,7 +371,7 @@ _SECCIONES_NAV = [
     ("lesiones", "Injuries"),
     ("pronosticos", "Predictions"),
     ("fantasy", "Fantasy"),
-    ("blog", "Blog"),
+    ("blog", "Insider"),
 ]
 
 
@@ -457,10 +457,12 @@ def nombre_equipo(abbr: str) -> str:
 
 
 def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header: str, color_borde: str) -> str:
-    """Genera una tabla de una división al estilo gráfico de transmisión
-    deportiva: sub-encabezado en tono claro, filas oscuras, borde de color
-    redondeado alrededor de toda la división. Incluye G/P/E/%/PF/PC/Loc./Vis./Racha
-    (estas últimas cinco en gris, a modo de datos secundarios)."""
+    """Genera una tabla de una división: fondo gris uniforme (igual que
+    las tarjetas de noticias) en toda la caja, texto negro en todas
+    partes, encabezados en negritas, borde de color redondeado alrededor
+    de toda la división. Incluye G/P/E/%/PF/PC/Loc./Vis./Racha."""
+    GRIS = "#D8DBD4"
+    NEGRO = "#14241A"
     tiene_extra = "PF" in filas.columns
 
     filas_html = ""
@@ -470,19 +472,19 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         extra_html = ""
         if tiene_extra:
             extra_html = f"""
-            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('PF', '')}</td>
-            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('PC', '')}</td>
-            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('Loc', '')}</td>
-            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('Vis', '')}</td>
-            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('Racha', '')}</td>"""
+            <td style="text-align:center; color:{NEGRO}; background:{GRIS}; white-space:nowrap; font-size:0.85rem;">{row.get('PF', '')}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{GRIS}; white-space:nowrap; font-size:0.85rem;">{row.get('PC', '')}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{GRIS}; white-space:nowrap; font-size:0.85rem;">{row.get('Loc', '')}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{GRIS}; white-space:nowrap; font-size:0.85rem;">{row.get('Vis', '')}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{GRIS}; white-space:nowrap; font-size:0.85rem;">{row.get('Racha', '')}</td>"""
         filas_html += f"""
         <tr>
-            <td style="padding:6px 6px; background:#14241A;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
-            <td style="padding:8px 10px; font-weight:700; color:#F5F7FA; white-space:nowrap; background:#14241A; font-size:1rem;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#14241A; white-space:nowrap;">{row['V']}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#14241A; white-space:nowrap;">{row['D']}</td>
-            <td style="text-align:center; color:#E4E8EF; background:#14241A; white-space:nowrap;">{row['E']}</td>
-            <td style="text-align:center; color:#E4E8EF; font-weight:600; background:#14241A; white-space:nowrap;">{pct_txt}</td>
+            <td style="padding:6px 6px; background:{GRIS};"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
+            <td style="padding:8px 10px; font-weight:700; color:{NEGRO}; white-space:nowrap; background:{GRIS}; font-size:1rem;">{NOMBRES_COMPLETOS.get(row['Equipo'], row['Equipo'])}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{GRIS}; white-space:nowrap;">{row['V']}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{GRIS}; white-space:nowrap;">{row['D']}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{GRIS}; white-space:nowrap;">{row['E']}</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:600; background:{GRIS}; white-space:nowrap;">{pct_txt}</td>
             {extra_html}
         </tr>"""
 
@@ -490,7 +492,7 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
     colgroup_extra = ""
     if tiene_extra:
         columnas_extra_header = "".join(
-            f'<td style="text-align:center; color:#9CB3A3; font-weight:700; font-size:0.75rem; white-space:nowrap;">{c}</td>'
+            f'<td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.75rem; white-space:nowrap;">{c}</td>'
             for c in ["PF", "PC", "Loc.", "Vis.", "Racha"]
         )
         colgroup_extra = "".join('<col style="width:52px;">' for _ in range(5))
@@ -503,13 +505,102 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
             <col style="width:46px;"><col style="width:46px;"><col style="width:72px;">
             {colgroup_extra}
         </colgroup>
-        <tr style="background:{color_header};">
-            <td colspan="2" style="padding:8px 10px; color:white; font-weight:700; white-space:nowrap;
-                font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; border-radius:9px 0 0 0;">{nombre_division}</td>
-            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">G</td>
-            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">P</td>
-            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">E</td>
-            <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">.PCT</td>
+        <tr style="background:{GRIS};">
+            <td colspan="2" style="padding:8px 10px; color:{NEGRO}; font-weight:700; white-space:nowrap;
+                font-family:'Barlow Condensed',sans-serif; font-size:1.1rem;">{nombre_division}</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.8rem; white-space:nowrap;">G</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.8rem; white-space:nowrap;">P</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.8rem; white-space:nowrap;">E</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.8rem; white-space:nowrap;">.PCT</td>
+            {columnas_extra_header}
+        </tr>
+        {filas_html}
+    </table>
+    </div>
+    """)
+
+
+def agregar_standings_por_division(standings: pd.DataFrame) -> pd.DataFrame:
+    """Suma el récord de los equipos de cada división — un renglón por
+    división en vez de uno por equipo."""
+    cols_sum = [c for c in ["V", "D", "E", "PF", "PC"] if c in standings.columns]
+    agg = standings.groupby(["Conferencia", "División"], as_index=False)[cols_sum].sum()
+    total = agg["V"] + agg["D"] + agg["E"]
+    agg["% Victorias"] = ((agg["V"] + 0.5 * agg["E"]) / total.replace(0, pd.NA) * 100).round(1).fillna(0.0)
+    return agg
+
+
+def agregar_standings_por_conferencia(standings: pd.DataFrame) -> pd.DataFrame:
+    """Suma el récord de TODOS los equipos de la conferencia — un
+    renglón único con el total de las 4 divisiones."""
+    cols_sum = [c for c in ["V", "D", "E", "PF", "PC"] if c in standings.columns]
+    agg = standings.groupby(["Conferencia"], as_index=False)[cols_sum].sum()
+    total = agg["V"] + agg["D"] + agg["E"]
+    agg["% Victorias"] = ((agg["V"] + 0.5 * agg["E"]) / total.replace(0, pd.NA) * 100).round(1).fillna(0.0)
+    return agg
+
+
+def tabla_conferencia_agregada_html(nombre_conferencia: str, filas_division: pd.DataFrame,
+                                      fila_total: pd.Series, color_borde: str) -> str:
+    """Tabla de comparación por división dentro de una conferencia — cada
+    renglón es una división completa (suma de sus 4 equipos), y al final
+    un renglón de TOTAL con la suma de toda la conferencia. Mismo
+    lenguaje visual que tabla_division_html (gris uniforme, texto
+    negro, encabezados en negritas, bordes redondeados)."""
+    GRIS = "#D8DBD4"
+    GRIS_TOTAL = "#C3C7BD"
+    NEGRO = "#14241A"
+    tiene_extra = "PF" in filas_division.columns
+
+    def _fila(nombre, row, es_total=False):
+        pct = row["% Victorias"] / 100
+        total_juegos = row["V"] + row["D"] + row["E"]
+        pct_txt = "-" if total_juegos == 0 else f"{pct:.3f}".lstrip("0")
+        fondo = GRIS_TOTAL if es_total else GRIS
+        peso = "800" if es_total else "700"
+        extra_html = ""
+        if tiene_extra:
+            extra_html = f"""
+            <td style="text-align:center; color:{NEGRO}; background:{fondo}; white-space:nowrap; font-size:0.85rem; font-weight:{peso};">{int(row.get('PF', 0))}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{fondo}; white-space:nowrap; font-size:0.85rem; font-weight:{peso};">{int(row.get('PC', 0))}</td>"""
+        return f"""
+        <tr>
+            <td colspan="2" style="padding:8px 10px; font-weight:{peso}; color:{NEGRO}; white-space:nowrap;
+                background:{fondo}; font-size:1rem;">{nombre}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{fondo}; white-space:nowrap; font-weight:{peso};">{int(row['V'])}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{fondo}; white-space:nowrap; font-weight:{peso};">{int(row['D'])}</td>
+            <td style="text-align:center; color:{NEGRO}; background:{fondo}; white-space:nowrap; font-weight:{peso};">{int(row['E'])}</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:{peso}; background:{fondo}; white-space:nowrap;">{pct_txt}</td>
+            {extra_html}
+        </tr>"""
+
+    filas_html = "".join(_fila(row["División"], row) for _, row in filas_division.iterrows())
+    filas_html += _fila(f"Total {nombre_conferencia}", fila_total, es_total=True)
+
+    columnas_extra_header = ""
+    colgroup_extra = ""
+    if tiene_extra:
+        columnas_extra_header = "".join(
+            f'<td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.75rem; white-space:nowrap;">{c}</td>'
+            for c in ["PF", "PC"]
+        )
+        colgroup_extra = "".join('<col style="width:52px;">' for _ in range(2))
+
+    return _sin_sangria(f"""
+    <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; min-width:420px;">
+    <table style="width:100%; border-collapse:collapse; font-family:'Inter',sans-serif; table-layout:fixed;">
+        <colgroup>
+            <col style="width:42px;"><col><col style="width:46px;">
+            <col style="width:46px;"><col style="width:46px;"><col style="width:72px;">
+            {colgroup_extra}
+        </colgroup>
+        <tr style="background:{GRIS};">
+            <td colspan="2" style="padding:8px 10px; color:{NEGRO}; font-weight:700; white-space:nowrap;
+                font-family:'Barlow Condensed',sans-serif; font-size:1.1rem;">{nombre_conferencia}</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.8rem; white-space:nowrap;">G</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.8rem; white-space:nowrap;">P</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.8rem; white-space:nowrap;">E</td>
+            <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.8rem; white-space:nowrap;">.PCT</td>
             {columnas_extra_header}
         </tr>
         {filas_html}
@@ -878,9 +969,10 @@ if st.session_state.pagina == "inicio":
             filas_html += f"""
             <div style="background:#D8DBD4; border-radius:8px; box-shadow:0 3px 6px rgba(0,0,0,0.3);
                  padding:10px 12px; margin-bottom:8px; width:100%; max-width:100%; overflow:hidden;
-                 box-sizing:border-box; text-align:left;">
-                <span style="font-size:0.85rem; line-height:1.4; color:#14241A; text-align:left;
-                     display:block; word-break:break-word; overflow-wrap:anywhere; white-space:normal;">🏈 {titulo_html}</span>
+                 box-sizing:border-box; display:flex; align-items:flex-start; gap:10px;">
+                <span style="flex-shrink:0; font-size:0.9rem; line-height:1.4;">🏈</span>
+                <span style="flex:1; min-width:0; font-size:0.85rem; line-height:1.4; color:#14241A;
+                     text-align:left; word-break:break-word; overflow-wrap:anywhere; white-space:normal;">{titulo_html}</span>
             </div>"""
         st.markdown(_sin_sangria(f'<div style="width:100%; max-width:100%; overflow:hidden;">{filas_html}</div>'), unsafe_allow_html=True)
 
@@ -973,9 +1065,11 @@ if st.session_state.pagina == "estadisticas":
     hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Standings</span>')
 
     with st.container(key="selector_temporada"):
-        season_standings = st.number_input(
-            "Temporada", min_value=2015, max_value=2027,
-            value=datetime.date.today().year, key="season_standings",
+        anio_actual = datetime.date.today().year
+        anios_disponibles = list(range(anio_actual + 1, 2014, -1))
+        season_standings = st.selectbox(
+            "Temporada", anios_disponibles,
+            index=anios_disponibles.index(anio_actual), key="season_standings",
         )
     with st.spinner("Cargando tabla de posiciones..."):
         try:
@@ -1021,6 +1115,29 @@ if st.session_state.pagina == "estadisticas":
                     for div in sorted(nfc_df["División"].unique()):
                         filas = nfc_df[nfc_df["División"] == div].sort_values("% Victorias", ascending=False)
                         st.markdown(tabla_division_html(div, filas, "#AEC2E0", "#1D4E8F"), unsafe_allow_html=True)
+
+                st.divider()
+                hero('<span style="color:#F1F4F9;">Por</span> <span style="color:#BD4E1E;">División y Conferencia</span>')
+                st.caption("Suma del récord de los equipos de cada división, y el total de cada conferencia.")
+
+                agregado_div = agregar_standings_por_division(standings)
+                agregado_conf = agregar_standings_por_conferencia(standings)
+
+                col_afc2, col_nfc2 = st.columns(2)
+                with col_afc2:
+                    divs_afc = agregado_div[agregado_div["Conferencia"] == "AFC"].sort_values("% Victorias", ascending=False)
+                    total_afc = agregado_conf[agregado_conf["Conferencia"] == "AFC"].iloc[0]
+                    st.markdown(
+                        tabla_conferencia_agregada_html("AFC", divs_afc, total_afc, "#C8102E"),
+                        unsafe_allow_html=True,
+                    )
+                with col_nfc2:
+                    divs_nfc = agregado_div[agregado_div["Conferencia"] == "NFC"].sort_values("% Victorias", ascending=False)
+                    total_nfc = agregado_conf[agregado_conf["Conferencia"] == "NFC"].iloc[0]
+                    st.markdown(
+                        tabla_conferencia_agregada_html("NFC", divs_nfc, total_nfc, "#1D4E8F"),
+                        unsafe_allow_html=True,
+                    )
         except Exception as e:
             st.error(f"No se pudo cargar la tabla de posiciones: {e}")
 
@@ -1139,7 +1256,7 @@ if st.session_state.pagina == "fantasy":
 # ============================================================
 if st.session_state.pagina == "blog":
     encabezado_sitio("blog")
-    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Blog</span>')
+    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Insider</span>')
     st.info(
         "Todavía no hay nada armado aquí — dime qué te gustaría ver "
         "(artículos de opinión, análisis a fondo, columnas de autor, etc.) "
