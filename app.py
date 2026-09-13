@@ -1302,7 +1302,7 @@ if st.session_state.pagina == "lesiones":
         # Espaciador para que "Injury News" quede a la misma altura que
         # el título con logo (equipo o "NFL") — ahora siempre existe ese
         # encabezado, así que el espaciador es el mismo en ambos casos.
-        st.markdown('<div style="height:96px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:50px;"></div>', unsafe_allow_html=True)
         st.markdown(_sin_sangria("""
         <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem;
            color:#F1F4F9; margin:0 0 10px 0;">Injury News</p>
