@@ -589,7 +589,7 @@ def renderizar_noticias(noticias: list):
                         img_tag = f"""
                         <div style="position:relative; flex-shrink:0;">
                             <img src="{n['imagen']}" style="width:100%; height:180px;
-                                 object-fit:cover; border-radius:6px; display:block;">
+                                 object-fit:cover; object-position:center top; border-radius:6px; display:block;">
                             {f'<span style="position:absolute; bottom:6px; right:8px; background:rgba(0,0,0,0.6); color:#FFFFFF; font-size:0.68rem; padding:2px 7px; border-radius:4px;">{fuente}</span>' if fuente else ''}
                         </div>"""
                         imagen_html = f'<a href="{link}">{img_tag}</a>' if link else img_tag
@@ -820,10 +820,11 @@ if st.session_state.pagina == "inicio":
             titulo_html = f'<a href="{link}" style="color:#14241A; text-decoration:none; font-weight:700;">{n["titulo"]}</a>' if link else n["titulo"]
             filas_html += f"""
             <div style="background:#D8DBD4; border-radius:8px; box-shadow:0 3px 6px rgba(0,0,0,0.3);
-                 padding:10px 12px; margin-bottom:8px;">
-                <span style="font-size:0.88rem; line-height:1.4; color:#14241A;">🏈 {titulo_html}</span>
+                 padding:10px 12px; margin-bottom:8px; max-width:100%; overflow:hidden; box-sizing:border-box;">
+                <span style="font-size:0.88rem; line-height:1.4; color:#14241A;
+                     word-wrap:break-word; overflow-wrap:break-word; white-space:normal;">🏈 {titulo_html}</span>
             </div>"""
-        st.markdown(_sin_sangria(f'<div>{filas_html}</div>'), unsafe_allow_html=True)
+        st.markdown(_sin_sangria(f'<div style="max-width:100%; overflow:hidden;">{filas_html}</div>'), unsafe_allow_html=True)
 
     with col_principal:
         renderizar_noticias(principales)
