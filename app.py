@@ -169,28 +169,6 @@ def inyectar_estilos():
     .ticker-estado { font-size:0.7rem; color:#1F241E; text-align:center; line-height:1.3; white-space:normal; }
     .ticker-estadio { font-size:0.65rem; color:#3E4A42; font-weight:600; text-align:center; margin-top:1px; line-height:1.3; white-space:normal; }
 
-    /* Tarjetas de equipo (lista de Noticias) — tipo tecla de teclado,
-       toda la tarjeta es clicable (botón invisible cubre todo encima). */
-    div[class*="st-key-equipo_cell_"] {
-        position: relative;
-        background: #D8DBD4; border: 1px solid #AEB4A9; border-radius: 8px;
-        padding: 3px 1px 2px 1px; text-align: center;
-        box-shadow: 0 3px 0 #8B9187, 0 5px 8px rgba(0,0,0,0.3);
-        margin-bottom: 4px;
-        overflow: hidden;
-    }
-    div[class*="st-key-equipo_cell_"] [data-testid="stButton"] {
-        position: absolute !important; inset: 0 !important;
-        width: 100% !important; height: 100% !important;
-        margin: 0 !important; padding: 0 !important;
-    }
-    div[class*="st-key-equipo_cell_"] [data-testid="stButton"] button {
-        position: absolute !important; inset: 0 !important;
-        width: 100% !important; height: 100% !important;
-        opacity: 0 !important; cursor: pointer; margin: 0 !important; padding: 0 !important;
-        min-height: 0 !important;
-    }
-
     /* Tarjetas de noticias — blancas con sombra, texto negro (mismo
        lenguaje visual que las tarjetas de equipo, para que se lea bien
        sobre el fondo con imagen). */
@@ -534,13 +512,13 @@ def lideres_estadisticos_cacheados(season: int, top_n: int = 10):
 
 def lista_equipos_sidebar():
     """Equipos agrupados por división — el nombre de la división arriba
-    de cada grupo de 4, y cada equipo como una tarjeta blanca clicable
-    completa (logo grande centrado + abreviatura, toda la tarjeta es un
-    solo hipervínculo). Clic en cualquiera lleva al detalle de ese
-    equipo (calendario, roster, standing)."""
+    de cada grupo de 4. Cada equipo es una tarjeta angosta donde el
+    logo (grande, ocupa casi todo el espacio) es un hipervínculo real
+    (?equipo=ABBR) — no depende de botones ni overlays de Streamlit,
+    así que el clic es 100% confiable."""
     st.markdown(_sin_sangria("""
     <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-       font-size:1.4rem; color:#F1F4F9; letter-spacing:0.03em; margin:0 0 10px 0;
+       font-size:1.4rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
        text-align:center; background:#1C3324; border:1px solid #26402F; border-radius:6px;
        padding:8px 0;">EQUIPOS</p>
     """), unsafe_allow_html=True)
@@ -564,20 +542,20 @@ def lista_equipos_sidebar():
            font-size:1.15rem; color:#E8ECE9; text-align:center; margin:10px 0 6px 0;">{division}</p>
         """), unsafe_allow_html=True)
 
-        cols_equipos = st.columns(4)
-        for col, abbr in zip(cols_equipos, equipos_division):
-            with col:
-                with st.container(key=f"equipo_cell_{abbr}"):
-                    st.markdown(_sin_sangria(f"""
-                    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
-                        <img src="{logo_url(abbr)}" style="width:20px; height:auto; display:block; margin:0 auto 2px auto;">
-                        <span style="font-weight:700; color:#14241A; font-size:0.58rem;">{abbr}</span>
-                    </div>
-                    """), unsafe_allow_html=True)
-                    if st.button(" ", key=f"lista_equipo_{abbr}", use_container_width=True):
-                        st.session_state.equipo_detalle = abbr
-                        st.session_state.pagina = "equipo_detalle"
-                        st.rerun()
+        tarjetas = "".join(
+            f'''<a href="?equipo={abbr}" target="_self" style="text-decoration:none;">
+                <div style="max-width:44px; margin:0 auto; background:#D8DBD4; border:1px solid #AEB4A9;
+                     border-radius:8px; box-shadow:0 3px 0 #8B9187, 0 5px 8px rgba(0,0,0,0.3);
+                     padding:3px 1px 2px 1px; text-align:center;">
+                    <img src="{logo_url(abbr)}" style="width:40px; height:auto; display:block; margin:0 auto 1px auto;">
+                    <span style="font-weight:700; color:#14241A; font-size:0.52rem;">{abbr}</span>
+                </div>
+            </a>'''
+            for abbr in equipos_division
+        )
+        st.markdown(_sin_sangria(f"""
+        <div style="display:flex; justify-content:space-between; gap:4px; margin-bottom:8px;">{tarjetas}</div>
+        """), unsafe_allow_html=True)
 
 
 def renderizar_noticias(noticias: list):
@@ -769,6 +747,14 @@ def mostrar_resultado(resultado, equipo_a, equipo_b, clima=None, local=None, com
 if "pagina" not in st.session_state:
     st.session_state.pagina = "inicio"
 
+# El logo de cada equipo es un hipervínculo real (?equipo=ABBR) — mucho
+# más confiable que intentar cubrir toda la tarjeta con un botón
+# invisible. Si llega ese parámetro en la URL, navega al detalle.
+if st.query_params.get("equipo"):
+    st.session_state.equipo_detalle = st.query_params["equipo"]
+    st.session_state.pagina = "equipo_detalle"
+    st.query_params.clear()
+
 if not NFL_DATA_PY_OK:
     st.error("nfl_data_py no está instalado en este entorno. Ejecuta: pip install nfl_data_py")
     st.stop()
@@ -815,7 +801,7 @@ if st.session_state.pagina == "inicio":
         st.markdown(_sin_sangria(f"""
         <div>
             <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-               font-size:1.4rem; color:#F1F4F9; letter-spacing:0.03em; margin:0 0 10px 0;
+               font-size:1.4rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
                text-align:center; background:#1C3324; border:1px solid #26402F; border-radius:6px;
                padding:8px 0;">NOTICIAS</p>
             {filas_html}
