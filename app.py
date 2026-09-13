@@ -176,10 +176,19 @@ def inyectar_estilos():
        sobre el fondo con imagen). */
     .noticia-card {
         background: #D8DBD4; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.35);
-        padding: 14px; text-align: center; margin-bottom: 12px;
+        padding: 14px; text-align: center; margin-bottom: 14px;
+        display: flex; flex-direction: column; height: 340px;
     }
     .noticia-card p { color: #14241A; }
-    .noticia-card a { color: #BD4E1E; font-weight: 600; }
+    .noticia-card a { color: #BD4E1E; font-weight: 700; text-decoration: underline; }
+    .noticia-titulo {
+        font-weight: 700; margin: 10px 0 6px 0; font-size: 1rem;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .noticia-desc {
+        color: #3A3A3A; font-size: 0.88rem; margin: 0;
+        display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
     </style>
     """), unsafe_allow_html=True)
 
@@ -369,8 +378,8 @@ def barra_navegacion(activo: str):
 
 def encabezado_sitio(activo: str):
     """Encabezado compartido por TODA la app: franja de campo, resultados
-    de la semana, logo grande centrado, y el menú de navegación — se ve
-    igual arriba de cualquier pantalla en la que estés."""
+    de la semana, menú de navegación, y la fila de logos de equipo — se
+    ve igual arriba de cualquier pantalla en la que estés."""
     franja_campo()
     with st.spinner("Cargando marcadores..."):
         partidos_ticker = marcadores_cacheados(datetime.date.today().year, api_key=API_SPORTS_KEY)
@@ -381,6 +390,7 @@ def encabezado_sitio(activo: str):
     ticker_marcadores(partidos_ticker, standings_ticker)
     logo_grande_centrado()
     barra_navegacion(activo)
+    fila_equipos_alfabetica()
 
 
 inyectar_estilos()
@@ -528,58 +538,31 @@ def lideres_estadisticos_cacheados(season: int, top_n: int = 10):
     return obtener_lideres_estadisticos(season, top_n)
 
 
-def lista_equipos_sidebar():
-    """Equipos agrupados por división — el nombre de la división arriba
-    de cada grupo de 4. Cada equipo es una tarjeta angosta donde el
-    logo (grande, ocupa casi todo el espacio) es un hipervínculo real
-    (?equipo=ABBR) — no depende de botones ni overlays de Streamlit,
-    así que el clic es 100% confiable."""
-    st.markdown(_sin_sangria("""
-    <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-       font-size:1.4rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
-       text-align:center; background:#1C3324; border:1px solid #26402F; border-radius:6px;
-       padding:8px 0;">EQUIPOS</p>
+def fila_equipos_alfabetica():
+    """Fila horizontal con los 32 logos de equipo, en orden alfabético,
+    cuadrados y alineados — cada logo es un hipervínculo real
+    (?equipo=ABBR), sin depender de botones ni overlays de Streamlit."""
+    orden_alfabetico = sorted(EQUIPOS)
+    tarjetas = "".join(
+        f'''<a href="?equipo={abbr}" target="_self" style="text-decoration:none; flex:0 0 auto;">
+            <div style="width:38px; height:38px; background:#D8DBD4; border:1px solid #AEB4A9;
+                 border-radius:6px; display:flex; align-items:center; justify-content:center;
+                 box-shadow:0 2px 0 #8B9187, 0 3px 5px rgba(0,0,0,0.3);">
+                <img src="{logo_url(abbr)}" style="width:29px; height:29px; object-fit:contain; display:block;">
+            </div>
+        </a>'''
+        for abbr in orden_alfabetico
+    )
+    st.markdown(_sin_sangria(f"""
+    <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin:4px 0 20px 0;">{tarjetas}</div>
     """), unsafe_allow_html=True)
-
-    # Agrupa los 32 equipos por división, en orden AFC Este..NFC Oeste.
-    divisiones = {}
-    for abbr in EQUIPOS:
-        _, division = _DIVISIONES_NFL.get(abbr, ("?", "Otros"))
-        divisiones.setdefault(division, []).append(abbr)
-
-    orden = ["AFC Este", "AFC Norte", "AFC Sur", "AFC Oeste",
-             "NFC Este", "NFC Norte", "NFC Sur", "NFC Oeste"]
-
-    for division in orden:
-        equipos_division = divisiones.get(division, [])
-        if not equipos_division:
-            continue
-
-        st.markdown(_sin_sangria(f"""
-        <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-           font-size:1.15rem; color:#E8ECE9; text-align:center; margin:10px 0 6px 0;">{division}</p>
-        """), unsafe_allow_html=True)
-
-        tarjetas = "".join(
-            f'''<a href="?equipo={abbr}" target="_self" style="text-decoration:none;">
-                <div style="max-width:56px; margin:0 auto; background:#D8DBD4; border:1px solid #AEB4A9;
-                     border-radius:8px; box-shadow:0 3px 0 #8B9187, 0 5px 8px rgba(0,0,0,0.3);
-                     padding:4px 2px 3px 2px; text-align:center;">
-                    <img src="{logo_url(abbr)}" style="width:34px; height:auto; display:block; margin:0 auto 0 auto;">
-                    <span style="font-weight:700; color:#14241A; font-size:1.5rem; line-height:1; display:block; margin-top:-2px;">{abbr}</span>
-                </div>
-            </a>'''
-            for abbr in equipos_division
-        )
-        st.markdown(_sin_sangria(f"""
-        <div style="display:flex; justify-content:flex-start; gap:3px; margin-bottom:6px;">{tarjetas}</div>
-        """), unsafe_allow_html=True)
 
 
 def renderizar_noticias(noticias: list):
-    """Grilla de 2 columnas: tarjeta blanca con sombra — foto (clicable,
-    tamaño parejo) arriba, nota en texto negro abajo — usado tanto en
-    Noticias generales como por equipo."""
+    """Grilla de 2 columnas: tarjeta gris con sombra, tamaño fijo y
+    simétrico — foto (con la fuente sobrepuesta en la esquina) arriba,
+    título y nota abajo, "Leer más" al final del párrafo — usado tanto
+    en Noticias generales como por equipo."""
     if noticias and "error" in noticias[0]:
         st.info(f"No se pudieron cargar las noticias: {noticias[0]['error']}")
     elif not noticias:
@@ -591,21 +574,22 @@ def renderizar_noticias(noticias: list):
             for col, n in zip(cols, par):
                 with col:
                     link = n.get("link", "")
+                    fuente = n.get("fuente", "")
                     imagen_html = ""
                     if n.get("imagen"):
-                        img_tag = (
-                            f'<img src="{n["imagen"]}" style="width:70%; aspect-ratio:16/10; '
-                            f'object-fit:cover; border-radius:6px; margin:0 auto 10px auto; display:block;">'
-                        )
+                        img_tag = f"""
+                        <div style="position:relative;">
+                            <img src="{n['imagen']}" style="width:100%; aspect-ratio:16/10;
+                                 object-fit:cover; border-radius:6px; display:block;">
+                            {f'<span style="position:absolute; bottom:6px; right:8px; background:rgba(0,0,0,0.6); color:#FFFFFF; font-size:0.68rem; padding:2px 7px; border-radius:4px;">{fuente}</span>' if fuente else ''}
+                        </div>"""
                         imagen_html = f'<a href="{link}">{img_tag}</a>' if link else img_tag
 
                     st.markdown(_sin_sangria(f"""
                     <div class="noticia-card">
                         {imagen_html}
-                        <p style="font-weight:700; margin:0 0 4px 0;">{n['titulo']}</p>
-                        <p style="color:#7A7A7A; font-size:0.75rem; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.03em;">{n.get('fuente', '')}</p>
-                        <p style="color:#3A3A3A; font-size:0.9rem; margin:0 0 8px 0;">{n.get('descripcion', '')}</p>
-                        {f'<a href="{link}">Leer más</a>' if link else ''}
+                        <p class="noticia-titulo">{n['titulo']}</p>
+                        <p class="noticia-desc">{n.get('descripcion', '')} {f'<a href="{link}">Leer más</a>' if link else ''}</p>
                     </div>
                     """), unsafe_allow_html=True)
 
@@ -813,42 +797,27 @@ if st.session_state.pagina == "inicio":
     )
 
     with st.spinner("Cargando noticias..."):
-        noticias = noticias_cacheadas(20)
+        noticias = noticias_cacheadas(25)
 
-    principales = noticias[:6] if not (noticias and "error" in noticias[0]) else noticias
-    pasadas = noticias[6:20] if not (noticias and "error" in noticias[0]) else []
+    principales = noticias[:10] if not (noticias and "error" in noticias[0]) else noticias
+    pasadas = noticias[10:30] if not (noticias and "error" in noticias[0]) else []
 
-    col_equipos, col_principal, col_lista = st.columns([1, 2, 1], gap="large")
-
-    with col_equipos:
-        lista_equipos_sidebar()
-
-    with col_principal:
-        renderizar_noticias(principales)
+    col_lista, col_principal = st.columns([1, 3], gap="large")
 
     with col_lista:
         filas_html = ""
         for n in pasadas:
             link = n.get("link", "")
-            titulo_html = f'<a href="{link}" style="color:#F1F4F9; text-decoration:none;">{n["titulo"]}</a>' if link else n["titulo"]
-            fuente_txt = n.get("fuente", "")
+            titulo_html = f'<a href="{link}" style="color:#14241A; text-decoration:none; font-weight:700;">{n["titulo"]}</a>' if link else n["titulo"]
             filas_html += f"""
-            <div style="padding:8px 10px; margin-bottom:6px; border:1px solid #AEB4A9; border-radius:6px; display:flex; align-items:flex-start; gap:8px;">
-                <span style="font-size:0.9rem; line-height:1.4;">🏈</span>
-                <span style="font-size:0.88rem; line-height:1.4; color:#F1F4F9; font-weight:600;">{titulo_html}
-                    <span style="display:block; color:#8FA398; font-size:0.7rem; text-transform:uppercase; font-weight:400;">{fuente_txt}</span>
-                </span>
+            <div style="background:#D8DBD4; border-radius:8px; box-shadow:0 3px 6px rgba(0,0,0,0.3);
+                 padding:10px 12px; margin-bottom:8px;">
+                <span style="font-size:0.88rem; line-height:1.4; color:#14241A;">🏈 {titulo_html}</span>
             </div>"""
+        st.markdown(_sin_sangria(f'<div>{filas_html}</div>'), unsafe_allow_html=True)
 
-        st.markdown(_sin_sangria(f"""
-        <div>
-            <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700;
-               font-size:1.4rem; color:#BD4E1E; letter-spacing:0.03em; margin:0 0 10px 0;
-               text-align:center; background:#1C3324; border:1px solid #26402F; border-radius:6px;
-               padding:8px 0;">NOTICIAS</p>
-            {filas_html}
-        </div>
-        """), unsafe_allow_html=True)
+    with col_principal:
+        renderizar_noticias(principales)
 
     st.stop()
 
