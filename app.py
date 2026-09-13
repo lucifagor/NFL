@@ -185,7 +185,7 @@ def inyectar_estilos():
         background: #D8DBD4; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.35);
         padding: 14px; text-align: center; margin-bottom: 14px;
         display: flex; flex-direction: column; height: 360px; overflow: hidden;
-        max-width: 100%; width: 100%;
+        max-width: 80%; width: 80%; margin-left: auto; margin-right: auto;
     }
     .noticia-card img { flex-shrink: 0; max-width: 100%; }
     .noticia-card p { color: #14241A; }
