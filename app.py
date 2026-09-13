@@ -41,6 +41,7 @@ from comparador_nfl import (
     obtener_lesiones_liga_api_sports,
     obtener_lesiones_espn,
     obtener_posiciones_liga,
+    obtener_lesiones_equipo_api_sports,
     _APODOS_NFL,
     obtener_standings,
     obtener_standings_api_sports,
@@ -800,10 +801,26 @@ def posiciones_liga_cacheadas(season: int):
     return obtener_posiciones_liga(season)
 
 
+@st.cache_data(show_spinner=False, ttl=300)
+def lesiones_equipo_api_sports_cacheadas(team_abbr: str, season: int, api_key: str):
+    return obtener_lesiones_equipo_api_sports(api_key, season, team_abbr)
+
+
 def lesiones_equipo_con_respaldo(team_abbr: str, season: int, api_key: str) -> list:
-    """Intenta el endpoint de ESPN por equipo primero; si viene vacío
-    (el endpoint por equipo no siempre responde bien), cae a filtrar el
-    listado completo de la liga —que sí funciona— por ese equipo."""
+    """Si hay API key, consulta ese equipo específico directo en
+    API-Sports (misma fuente confiable que 'Toda la liga', sin el
+    recorte por fecha que podía dejar fuera a un equipo con lesiones
+    menos recientes). Si no hay API key, o falla, usa el endpoint de
+    ESPN por equipo; y si ese también viene vacío, cae a filtrar el
+    listado completo de la liga por ese equipo."""
+    if api_key:
+        try:
+            resultado = lesiones_equipo_api_sports_cacheadas(team_abbr, season, api_key)
+            if resultado:
+                return resultado
+        except Exception:
+            pass
+
     directo = lesiones_equipo_cacheadas(team_abbr)
     if directo and "error" not in directo[0]:
         return [dict(l, equipo=team_abbr) for l in directo]
@@ -1142,8 +1159,6 @@ if st.session_state.pagina == "lesiones":
 
         if lesiones and "error" in lesiones[0]:
             st.info(f"No se pudo cargar el reporte de lesiones: {lesiones[0]['error']}")
-        elif not lesiones:
-            st.info("No hay lesiones de importancia reportadas en este momento.")
         else:
             if equipo_filtro != "Toda la liga":
                 st.markdown(_sin_sangria(f"""
@@ -1156,8 +1171,22 @@ if st.session_state.pagina == "lesiones":
 
             col_foto = "44px " if muestra_equipo else ""
             filas_html = ""
-            for i, l in enumerate(lesiones):
+            # Siempre se muestran al menos 10 espacios — si hay menos
+            # lesionados, se rellena con filas vacías del mismo diseño;
+            # si hay más de 10, la caja simplemente crece.
+            total_filas = max(len(lesiones), 10)
+            for i in range(total_filas):
                 fondo = "#FFFFFF" if i % 2 == 0 else "#F1F2EE"
+                l = lesiones[i] if i < len(lesiones) else None
+
+                if l is None:
+                    filas_html += f"""
+                    <div style="display:grid; grid-template-columns:{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 1.6fr 60px;
+                         gap:10px; align-items:center; background:{fondo}; padding:10px 8px; min-height:20px;">
+                        <div></div><div></div><div></div><div></div><div></div><div></div>
+                    </div>"""
+                    continue
+
                 estado = l.get("estado", "") or ""
                 e_min = estado.lower()
                 if "quest" in e_min or "doubt" in e_min:

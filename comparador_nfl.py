@@ -883,6 +883,42 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
     return resultado
 
 
+def _lesiones_equipo_api_sports_raw(api_key: str, team_id, abbr: str) -> list:
+    """Lesiones de UN equipo directo desde API-Sports (sin combinar con
+    otros equipos ni recortar por fecha) — se usa tanto para el listado
+    de toda la liga como para el filtro por equipo específico, así
+    ambos usan la misma fuente confiable sin que un equipo con lesiones
+    'menos recientes' que las de otros quede fuera al truncar."""
+    data = _api_sports_get(api_key, "/injuries", {"team": team_id})
+    filas = []
+    for lesion in data.get("response", []):
+        jugador = lesion.get("player") or {}
+        filas.append({
+            "equipo": abbr,
+            "jugador": jugador.get("name", "?"),
+            "posicion": jugador.get("position", "") or jugador.get("pos", "") or "",
+            "foto": jugador.get("photo", "") or jugador.get("image", "") or "",
+            "estado": lesion.get("status", "?"),
+            "detalle": lesion.get("description", "") or "",
+            "fecha": lesion.get("date", "") or "",
+        })
+    return filas
+
+
+def obtener_lesiones_equipo_api_sports(api_key: str, season: int, team_abbr: str) -> list:
+    """Lesiones de un solo equipo específico, vía API-Sports — no pasa
+    por el recorte de 'toda la liga', así que no se pierde ningún
+    jugador de ese equipo aunque otros equipos tengan lesiones más
+    recientes."""
+    equipos = obtener_equipos_api_sports(api_key, season)
+    if not equipos or team_abbr not in equipos:
+        raise ValueError(f"No se encontró el equipo {team_abbr} en el catálogo de API-Sports.")
+    team_id = equipos[team_abbr]
+    filas = _lesiones_equipo_api_sports_raw(api_key, team_id, team_abbr)
+    filas.sort(key=lambda x: x.get("fecha") or "", reverse=True)
+    return filas
+
+
 def obtener_lesiones_liga_api_sports(api_key: str, season: int, limite: int = 30) -> list:
     """
     Lesiones recientes de toda la liga vía API-Sports (más confiable que
@@ -899,20 +935,7 @@ def obtener_lesiones_liga_api_sports(api_key: str, season: int, limite: int = 30
     def _lesiones_de_equipo(item):
         abbr, team_id = item
         try:
-            data = _api_sports_get(api_key, "/injuries", {"team": team_id})
-            filas = []
-            for lesion in data.get("response", []):
-                jugador = lesion.get("player") or {}
-                filas.append({
-                    "equipo": abbr,
-                    "jugador": jugador.get("name", "?"),
-                    "posicion": jugador.get("position", "") or jugador.get("pos", "") or "",
-                    "foto": jugador.get("photo", "") or jugador.get("image", "") or "",
-                    "estado": lesion.get("status", "?"),
-                    "detalle": lesion.get("description", "") or "",
-                    "fecha": lesion.get("date", "") or "",
-                })
-            return filas
+            return _lesiones_equipo_api_sports_raw(api_key, team_id, abbr)
         except Exception:
             return []
 
