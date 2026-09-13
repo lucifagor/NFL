@@ -488,7 +488,7 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
             <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO};">{row.get('PC', '')}</td>
             <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO};">{row.get('Loc', '')}</td>
             <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO};">{row.get('Vis', '')}</td>
-            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO}; padding-right:14px;">{row.get('Racha', '')}</td>"""
+            <td style="text-align:center; color:{NEGRO}; background:{BLANCO}; white-space:nowrap; font-size:0.85rem; border-bottom:{PUNTEADO}; padding-right:10px;">{row.get('Racha', '')}</td>"""
         filas_html += f"""
         <tr>
             <td style="padding:6px 6px; background:{BLANCO}; border-bottom:{PUNTEADO};"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
@@ -507,8 +507,9 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
             f'<td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">{c}</td>'
             for c in ["PF", "PC", "Loc.", "Vis."]
         )
-        columnas_extra_header += f'<td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap; padding-right:14px;">Racha</td>'
-        colgroup_extra = "".join('<col style="width:56px;">' for _ in range(5))
+        columnas_extra_header += f'<td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap; padding-right:10px;">Racha</td>'
+        colgroup_extra = "".join('<col style="width:48px;">' for _ in range(4))
+        colgroup_extra += '<col style="width:74px;">'
 
     return _sin_sangria(f"""
     <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; min-width:420px; background:{BLANCO};">
@@ -606,8 +607,10 @@ def tabla_conferencia_agregada_html(nombre_conferencia: str, filas_division: pd.
             {colgroup_extra}
         </colgroup>
         <tr style="background:{BLANCO};">
-            <td colspan="2" style="padding:8px 10px; color:{color_nombre}; font-weight:700; white-space:nowrap;
-                font-family:'Barlow Condensed',sans-serif; font-size:1.15rem;">{nombre_conferencia}</td>
+            <td colspan="2" style="padding:8px 10px; white-space:nowrap;">
+                <span style="background:{color_nombre}; color:#FFFFFF; font-weight:700; padding:4px 12px;
+                    border-radius:6px; font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; display:inline-block;">{nombre_conferencia}</span>
+            </td>
             <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">G</td>
             <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">P</td>
             <td style="text-align:center; color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;">E</td>
@@ -1133,16 +1136,21 @@ if st.session_state.pagina == "estadisticas":
                 agregado_div = agregar_standings_por_division(standings)
                 agregado_conf = agregar_standings_por_conferencia(standings)
 
+                # Orden fijo Este / Norte / Oeste / Sur (no por % de victorias).
+                orden_div = {"Este": 0, "Norte": 1, "Oeste": 2, "Sur": 3}
+                agregado_div["_orden"] = agregado_div["División"].str.split().str[-1].map(orden_div)
+                agregado_div = agregado_div.sort_values("_orden")
+
                 col_afc2, col_nfc2 = st.columns(2)
                 with col_afc2:
-                    divs_afc = agregado_div[agregado_div["Conferencia"] == "AFC"].sort_values("% Victorias", ascending=False)
+                    divs_afc = agregado_div[agregado_div["Conferencia"] == "AFC"]
                     total_afc = agregado_conf[agregado_conf["Conferencia"] == "AFC"].iloc[0]
                     st.markdown(
                         tabla_conferencia_agregada_html("AFC", divs_afc, total_afc, "#C8102E", "#C8102E"),
                         unsafe_allow_html=True,
                     )
                 with col_nfc2:
-                    divs_nfc = agregado_div[agregado_div["Conferencia"] == "NFC"].sort_values("% Victorias", ascending=False)
+                    divs_nfc = agregado_div[agregado_div["Conferencia"] == "NFC"]
                     total_nfc = agregado_conf[agregado_conf["Conferencia"] == "NFC"].iloc[0]
                     st.markdown(
                         tabla_conferencia_agregada_html("NFC", divs_nfc, total_nfc, "#1D4E8F", "#1D4E8F"),
