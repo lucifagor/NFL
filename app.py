@@ -474,7 +474,7 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
     Incluye G/P/E/%/PF/PC/Loc./Vis./Racha."""
     BLANCO = "#FFFFFF"
     NEGRO = "#14241A"
-    PUNTEADO = "1px dotted #C7CBC3"
+    PUNTEADO = "1.5px dotted #8B9187"
     tiene_extra = "PF" in filas.columns
 
     filas_html = ""
@@ -539,8 +539,11 @@ def agregar_standings_por_division(standings: pd.DataFrame) -> pd.DataFrame:
     división en vez de uno por equipo."""
     cols_sum = [c for c in ["V", "D", "E", "PF", "PC"] if c in standings.columns]
     agg = standings.groupby(["Conferencia", "División"], as_index=False)[cols_sum].sum()
-    total = agg["V"] + agg["D"] + agg["E"]
-    agg["% Victorias"] = ((agg["V"] + 0.5 * agg["E"]) / total.replace(0, pd.NA) * 100).round(1).fillna(0.0)
+    agg["% Victorias"] = agg.apply(
+        lambda r: round((r["V"] + 0.5 * r["E"]) / (r["V"] + r["D"] + r["E"]) * 100, 1)
+        if (r["V"] + r["D"] + r["E"]) > 0 else 0.0,
+        axis=1,
+    )
     return agg
 
 
@@ -549,8 +552,11 @@ def agregar_standings_por_conferencia(standings: pd.DataFrame) -> pd.DataFrame:
     renglón único con el total de las 4 divisiones."""
     cols_sum = [c for c in ["V", "D", "E", "PF", "PC"] if c in standings.columns]
     agg = standings.groupby(["Conferencia"], as_index=False)[cols_sum].sum()
-    total = agg["V"] + agg["D"] + agg["E"]
-    agg["% Victorias"] = ((agg["V"] + 0.5 * agg["E"]) / total.replace(0, pd.NA) * 100).round(1).fillna(0.0)
+    agg["% Victorias"] = agg.apply(
+        lambda r: round((r["V"] + 0.5 * r["E"]) / (r["V"] + r["D"] + r["E"]) * 100, 1)
+        if (r["V"] + r["D"] + r["E"]) > 0 else 0.0,
+        axis=1,
+    )
     return agg
 
 
@@ -563,7 +569,7 @@ def tabla_conferencia_agregada_html(nombre_conferencia: str, filas_division: pd.
     encabezados grandes en negritas, texto negro, bordes redondeados)."""
     BLANCO = "#FFFFFF"
     NEGRO = "#14241A"
-    PUNTEADO = "1px dotted #C7CBC3"
+    PUNTEADO = "1.5px dotted #8B9187"
     tiene_extra = "PF" in filas_division.columns
 
     def _fila(nombre, row, es_total=False):
