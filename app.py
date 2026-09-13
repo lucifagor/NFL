@@ -590,6 +590,7 @@ def renderizar_noticias(noticias: list):
                         <div style="position:relative; flex-shrink:0;">
                             <img src="{n['imagen']}" style="width:100%; height:180px;
                                  object-fit:cover; object-position:center top; border-radius:6px; display:block;">
+                            {f'<span style="position:absolute; bottom:6px; left:8px; background:rgba(189,78,30,0.9); color:#FFFFFF; font-weight:700; font-size:0.68rem; padding:2px 7px; border-radius:4px;">Leer más</span>' if link else ''}
                             {f'<span style="position:absolute; bottom:6px; right:8px; background:rgba(0,0,0,0.6); color:#FFFFFF; font-size:0.68rem; padding:2px 7px; border-radius:4px;">{fuente}</span>' if fuente else ''}
                         </div>"""
                         imagen_html = f'<a href="{link}">{img_tag}</a>' if link else img_tag
@@ -598,7 +599,7 @@ def renderizar_noticias(noticias: list):
                     <div class="noticia-card">
                         {imagen_html}
                         <p class="noticia-titulo">{n['titulo']}</p>
-                        <p class="noticia-desc">{n.get('descripcion', '')} {f'<a href="{link}">Leer más</a>' if link else ''}</p>
+                        <p class="noticia-desc">{n.get('descripcion', '')}</p>
                     </div>
                     """), unsafe_allow_html=True)
 
@@ -811,7 +812,7 @@ if st.session_state.pagina == "inicio":
     principales = noticias[:10] if not (noticias and "error" in noticias[0]) else noticias
     pasadas = noticias[10:30] if not (noticias and "error" in noticias[0]) else []
 
-    col_lista, col_principal, col_aire = st.columns([0.7, 2.6, 0.3], gap="large")
+    col_margen_izq, col_lista, col_principal, col_margen_der = st.columns([0.4, 0.7, 2.2, 0.4], gap="medium")
 
     with col_lista:
         filas_html = ""
