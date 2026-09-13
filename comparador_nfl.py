@@ -906,6 +906,8 @@ def obtener_lesiones_liga_api_sports(api_key: str, season: int, limite: int = 30
                 filas.append({
                     "equipo": abbr,
                     "jugador": jugador.get("name", "?"),
+                    "posicion": jugador.get("position", "") or jugador.get("pos", "") or "",
+                    "foto": jugador.get("photo", "") or jugador.get("image", "") or "",
                     "estado": lesion.get("status", "?"),
                     "detalle": lesion.get("description", "") or "",
                     "fecha": lesion.get("date", "") or "",

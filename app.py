@@ -782,6 +782,20 @@ def lesiones_equipo_cacheadas(team_abbr: str):
     return obtener_lesiones_espn(team_abbr)
 
 
+def lesiones_equipo_con_respaldo(team_abbr: str, season: int, api_key: str) -> list:
+    """Intenta el endpoint de ESPN por equipo primero; si viene vacío
+    (el endpoint por equipo no siempre responde bien), cae a filtrar el
+    listado completo de la liga —que sí funciona— por ese equipo."""
+    directo = lesiones_equipo_cacheadas(team_abbr)
+    if directo and "error" not in directo[0]:
+        return [dict(l, equipo=team_abbr) for l in directo]
+
+    liga = lesiones_liga_cacheadas(limite=300, season=season, api_key=api_key)
+    if liga and "error" not in liga[0]:
+        return [l for l in liga if l.get("equipo") == team_abbr]
+    return []
+
+
 @st.cache_data(show_spinner=False, ttl=900)
 def standings_cacheados(season: int, api_key: str = ""):
     """Usa API-Sports si hay key configurada (datos oficiales completos);
@@ -1060,10 +1074,11 @@ if st.session_state.pagina == "equipo_detalle":
 # ============================================================
 if st.session_state.pagina == "lesiones":
     encabezado_sitio("lesiones")
+    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Injuries</span>')
 
-    col_titulo, col_selector = st.columns([3, 1.2])
-    with col_titulo:
-        hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Injuries</span>')
+    season_lesiones = datetime.date.today().year
+
+    col_sel_izq, col_selector, col_sel_der = st.columns([1, 1, 1])
     with col_selector:
         equipo_filtro = st.selectbox(
             "Team Injuries",
@@ -1074,11 +1089,28 @@ if st.session_state.pagina == "lesiones":
 
     with st.spinner("Cargando lesiones..."):
         if equipo_filtro == "Toda la liga":
-            lesiones = lesiones_liga_cacheadas(season=datetime.date.today().year, api_key=API_SPORTS_KEY)
+            lesiones = lesiones_liga_cacheadas(season=season_lesiones, api_key=API_SPORTS_KEY)
             lesiones = lesiones[:10] if lesiones and "error" not in lesiones[0] else lesiones
         else:
-            lesiones_eq = lesiones_equipo_cacheadas(equipo_filtro)
-            lesiones = [dict(l, equipo=equipo_filtro) for l in lesiones_eq] if lesiones_eq else []
+            lesiones = lesiones_equipo_con_respaldo(equipo_filtro, season_lesiones, API_SPORTS_KEY)
+
+        # Set de nombres "relevantes en fantasy" (líderes de la liga y
+        # titulares QB1/RB1/WR1/TE1 de cada equipo) para la columna Fantasy.
+        jugadores_fantasy_relevantes = set()
+        try:
+            jc = jugadores_clave_cacheados(season_lesiones)
+            for col in ["qb1_nombre", "rb1_nombre", "wr1_nombre", "te1_nombre"]:
+                if col in jc.columns:
+                    jugadores_fantasy_relevantes.update(jc[col].dropna().tolist())
+        except Exception:
+            pass
+        try:
+            lid = lideres_estadisticos_cacheados(season_lesiones, 10)
+            for df_lid in lid.values():
+                if "player_name" in df_lid.columns:
+                    jugadores_fantasy_relevantes.update(df_lid["player_name"].dropna().tolist())
+        except Exception:
+            pass
 
     col_tabla, col_noticias = st.columns([2.4, 1], gap="medium")
 
@@ -1098,6 +1130,7 @@ if st.session_state.pagina == "lesiones":
                 """), unsafe_allow_html=True)
 
             muestra_equipo = equipo_filtro == "Toda la liga"
+            col_foto = "44px " if muestra_equipo else ""
             filas_html = ""
             for i, l in enumerate(lesiones):
                 fondo = "#FFFFFF" if i % 2 == 0 else "#F1F2EE"
@@ -1115,24 +1148,47 @@ if st.session_state.pagina == "lesiones":
                     abbr = l.get("equipo", "")
                     celda_equipo = f'<div style="text-align:center;"><img src="{logo_url(abbr)}" width="20"></div>'
 
+                # Rostro del jugador — solo si la fuente de datos lo trae
+                # (API-Sports a veces incluye foto directa del jugador).
+                celda_foto = ""
+                if muestra_equipo:
+                    foto = l.get("foto", "")
+                    celda_foto = (
+                        f'<div style="text-align:center;"><img src="{foto}" width="32" height="32" '
+                        f'style="border-radius:50%; object-fit:cover;"></div>' if foto
+                        else '<div></div>'
+                    )
+
+                es_fantasy = l.get("jugador", "") in jugadores_fantasy_relevantes
+                celda_fantasy = (
+                    '<div style="text-align:center; font-size:1.1rem;" title="Relevante en fantasy">🔴</div>'
+                    if es_fantasy else '<div></div>'
+                )
+
+                posicion_txt = l.get("posicion", "") or "—"
+
                 filas_html += f"""
-                <div style="display:grid; grid-template-columns:{'40px ' if muestra_equipo else ''}1fr 60px 130px 2fr;
+                <div style="display:grid; grid-template-columns:{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 1.6fr 60px;
                      gap:10px; align-items:center; background:{fondo}; padding:10px 8px;">
+                    {celda_foto}
                     {celda_equipo}
                     <div style="color:#1B5FBF; font-weight:600; font-size:0.92rem;">{l.get('jugador', '?')}</div>
-                    <div style="color:#5A5A5A; font-size:0.85rem;">{l.get('posicion', '')}</div>
+                    <div style="color:#5A5A5A; font-size:0.85rem;">{posicion_txt}</div>
                     <div style="font-size:0.85rem; color:#14241A;"><span style="color:{color_punto};">●</span> {estado}</div>
                     <div style="color:#5A5A5A; font-size:0.82rem;">{l.get('detalle', '')}</div>
+                    {celda_fantasy}
                 </div>"""
 
-            encabezado_cols = f"{'40px ' if muestra_equipo else ''}1fr 60px 130px 2fr"
+            encabezado_cols = f"{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 1.6fr 60px"
+            encabezado_celda_foto = '<div></div>' if muestra_equipo else ''
             encabezado_celda_equipo = '<div></div>' if muestra_equipo else ''
             st.markdown(_sin_sangria(f"""
             <div style="background:#FFFFFF; border-radius:10px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.3);">
                 <div style="display:grid; grid-template-columns:{encabezado_cols}; gap:10px; padding:8px 8px;
                      border-bottom:2px solid #E4E6E1; font-size:0.75rem; font-weight:700; color:#7A7A7A; text-transform:uppercase;">
+                    {encabezado_celda_foto}
                     {encabezado_celda_equipo}
-                    <div>Name</div><div>Pos</div><div>Status</div><div>Comment</div>
+                    <div>Name</div><div>Pos</div><div>Status</div><div>Comment</div><div>Fantasy</div>
                 </div>
                 {filas_html}
             </div>
