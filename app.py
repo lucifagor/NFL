@@ -19,6 +19,7 @@ Este archivo reutiliza toda la lógica de comparador_nfl.py (no la duplica).
 """
 
 import streamlit as st
+import re
 import pandas as pd
 import datetime
 from zoneinfo import ZoneInfo
@@ -236,6 +237,23 @@ def franja_campo():
 
 _MESES_ES = {1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
              7: "jul", 8: "ago", 9: "sep", 10: "oct", 11: "nov", 12: "dic"}
+
+
+def _estimar_regreso(detalle: str) -> str:
+    """Busca una mención de semana de regreso dentro del texto del
+    comentario de la lesión (ej. 'Expected Return - Week 2'). No
+    tenemos una fecha estructurada de regreso en ninguna fuente
+    conectada, así que esto es una búsqueda de texto de mejor esfuerzo:
+    solo cuenta si la palabra 'return' aparece cerca de 'Week N' (para
+    no confundirla con la semana en que se lesionó) — si no encuentra
+    ese patrón, dice honestamente 'Unavailable' en vez de inventar una
+    fecha."""
+    if not detalle:
+        return "Unavailable"
+    m = re.search(r"return[^.]{0,30}?week\s*(\d+)", detalle, re.IGNORECASE)
+    if m:
+        return f"Week {m.group(1)}"
+    return "Unavailable"
 
 
 def _temporada_nfl_actual() -> int:
@@ -1126,24 +1144,6 @@ if st.session_state.pagina == "lesiones":
         # busca por nombre en el roster completo de la liga (nfl_data_py).
         posiciones_respaldo = posiciones_liga_cacheadas(season_lesiones)
 
-        # Set de nombres "relevantes en fantasy" (líderes de la liga y
-        # titulares QB1/RB1/WR1/TE1 de cada equipo) para la columna Fantasy.
-        jugadores_fantasy_relevantes = set()
-        try:
-            jc = jugadores_clave_cacheados(season_lesiones)
-            for col in ["qb1_nombre", "rb1_nombre", "wr1_nombre", "te1_nombre"]:
-                if col in jc.columns:
-                    jugadores_fantasy_relevantes.update(jc[col].dropna().tolist())
-        except Exception:
-            pass
-        try:
-            lid = lideres_estadisticos_cacheados(season_lesiones, 10)
-            for df_lid in lid.values():
-                if "player_name" in df_lid.columns:
-                    jugadores_fantasy_relevantes.update(df_lid["player_name"].dropna().tolist())
-        except Exception:
-            pass
-
     col_tabla, col_noticias = st.columns([2.4, 1], gap="medium")
 
     with col_tabla:
@@ -1219,11 +1219,8 @@ if st.session_state.pagina == "lesiones":
                         else '<div></div>'
                     )
 
-                es_fantasy = l.get("jugador", "") in jugadores_fantasy_relevantes
-                celda_fantasy = (
-                    '<div style="text-align:center; font-size:1.1rem;" title="Relevante en fantasy">🔴</div>'
-                    if es_fantasy else '<div></div>'
-                )
+                regreso_txt = _estimar_regreso(l.get("detalle", ""))
+                celda_regreso = f'<div style="text-align:center; font-size:0.8rem; color:#5A5A5A;">{regreso_txt}</div>'
 
                 posicion_txt = l.get("posicion", "") or posiciones_respaldo.get(l.get("jugador", ""), "") or "—"
 
@@ -1236,7 +1233,7 @@ if st.session_state.pagina == "lesiones":
                     <div style="color:#5A5A5A; font-size:0.85rem;">{posicion_txt}</div>
                     <div style="font-size:0.85rem; color:#14241A;"><span style="color:{color_punto};">●</span> {estado}</div>
                     <div style="color:#5A5A5A; font-size:0.82rem;">{l.get('detalle', '')}</div>
-                    {celda_fantasy}
+                    {celda_regreso}
                 </div>"""
 
             encabezado_cols = f"{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 1.6fr 60px"
@@ -1248,7 +1245,7 @@ if st.session_state.pagina == "lesiones":
                      border-bottom:2px solid #E4E6E1; font-size:0.75rem; font-weight:700; color:#7A7A7A; text-transform:uppercase;">
                     {encabezado_celda_foto}
                     {encabezado_celda_equipo}
-                    <div>Name</div><div>Pos</div><div>Status</div><div>Comment</div><div>Fantasy</div>
+                    <div>Name</div><div>Pos</div><div>Status</div><div>Comment</div><div>Return</div>
                 </div>
                 {filas_html}
             </div>
@@ -1302,7 +1299,7 @@ if st.session_state.pagina == "lesiones":
         # Espaciador para que "Injury News" quede a la misma altura que
         # el título con logo (equipo o "NFL") — ahora siempre existe ese
         # encabezado, así que el espaciador es el mismo en ambos casos.
-        st.markdown('<div style="height:50px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:70px;"></div>', unsafe_allow_html=True)
         st.markdown(_sin_sangria("""
         <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem;
            color:#F1F4F9; margin:0 0 10px 0;">Injury News</p>
