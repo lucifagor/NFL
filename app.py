@@ -185,7 +185,7 @@ def inyectar_estilos():
         background: #D8DBD4; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.35);
         padding: 14px; text-align: center; margin-bottom: 14px;
         display: flex; flex-direction: column; height: 360px; overflow: hidden;
-        max-width: 80%; width: 80%; margin-left: auto; margin-right: auto;
+        max-width: 94%; width: 94%; margin-left: auto; margin-right: auto;
     }
     .noticia-card img { flex-shrink: 0; max-width: 100%; }
     .noticia-card p { color: #14241A; }
@@ -579,7 +579,7 @@ def renderizar_noticias(noticias: list):
     else:
         for i in range(0, len(noticias), 2):
             par = noticias[i:i + 2]
-            cols = st.columns(2)
+            cols = st.columns(2, gap="small")
             for col, n in zip(cols, par):
                 with col:
                     link = n.get("link", "")
@@ -812,7 +812,7 @@ if st.session_state.pagina == "inicio":
     principales = noticias[:10] if not (noticias and "error" in noticias[0]) else noticias
     pasadas = noticias[10:30] if not (noticias and "error" in noticias[0]) else []
 
-    col_margen_izq, col_lista, col_principal, col_margen_der = st.columns([0.4, 0.7, 2.2, 0.4], gap="medium")
+    col_margen_izq, col_lista, col_principal, col_margen_der = st.columns([0.15, 0.7, 1.8, 0.35], gap="small")
 
     with col_lista:
         filas_html = ""
