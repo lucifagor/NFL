@@ -1077,6 +1077,22 @@ def obtener_calendario_equipo(team_abbr: str, season: int) -> pd.DataFrame:
     return pd.DataFrame(filas)
 
 
+def obtener_posiciones_liga(season: int) -> dict:
+    """
+    Diccionario {nombre del jugador: posición} de toda la liga, usando
+    el roster de nfl_data_py — se usa como respaldo cuando la fuente de
+    lesiones no trae la posición del jugador."""
+    if not NFL_DATA_PY_OK:
+        return {}
+    try:
+        roster = nfl.import_seasonal_rosters([season])
+        if roster is None or roster.empty or "player_name" not in roster.columns:
+            return {}
+        return dict(zip(roster["player_name"], roster.get("position", "")))
+    except Exception:
+        return {}
+
+
 def obtener_roster_equipo(team_abbr: str, season: int) -> pd.DataFrame:
     """
     Plantilla de un equipo para la temporada — nombre, posición y
