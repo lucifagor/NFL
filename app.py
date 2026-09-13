@@ -39,6 +39,7 @@ from comparador_nfl import (
     obtener_noticias_combinadas,
     obtener_lesiones_liga,
     obtener_lesiones_liga_api_sports,
+    obtener_lesiones_espn,
     obtener_standings,
     obtener_standings_api_sports,
     obtener_marcadores_actuales,
@@ -776,6 +777,12 @@ def lesiones_liga_cacheadas(limite: int = 25, season: int = None, api_key: str =
 
 
 @st.cache_data(show_spinner=False, ttl=900)
+def lesiones_equipo_cacheadas(team_abbr: str):
+    """Lesiones de un solo equipo (para el desplegable de Injuries)."""
+    return obtener_lesiones_espn(team_abbr)
+
+
+@st.cache_data(show_spinner=False, ttl=900)
 def standings_cacheados(season: int, api_key: str = ""):
     """Usa API-Sports si hay key configurada (datos oficiales completos);
     si no, o si falla, cae de vuelta al cálculo manual desde nfl_data_py."""
@@ -1053,24 +1060,105 @@ if st.session_state.pagina == "equipo_detalle":
 # ============================================================
 if st.session_state.pagina == "lesiones":
     encabezado_sitio("lesiones")
-    hero(
-        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Injuries</span>',
-        "Reporte de lesiones recientes de toda la liga.",
-    )
 
-    st.divider()
+    col_titulo, col_selector = st.columns([3, 1.2])
+    with col_titulo:
+        hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Injuries</span>')
+    with col_selector:
+        equipo_filtro = st.selectbox(
+            "Team Injuries",
+            ["Toda la liga"] + EQUIPOS,
+            format_func=lambda a: "Toda la liga" if a == "Toda la liga" else f"{NOMBRES_EQUIPO.get(a, a)}",
+            key="equipo_lesiones",
+        )
+
     with st.spinner("Cargando lesiones..."):
-        lesiones = lesiones_liga_cacheadas(season=datetime.date.today().year, api_key=API_SPORTS_KEY)
+        if equipo_filtro == "Toda la liga":
+            lesiones = lesiones_liga_cacheadas(season=datetime.date.today().year, api_key=API_SPORTS_KEY)
+            lesiones = lesiones[:10] if lesiones and "error" not in lesiones[0] else lesiones
+        else:
+            lesiones_eq = lesiones_equipo_cacheadas(equipo_filtro)
+            lesiones = [dict(l, equipo=equipo_filtro) for l in lesiones_eq] if lesiones_eq else []
 
-    if lesiones and "error" in lesiones[0]:
-        st.info(f"No se pudo cargar el reporte de lesiones: {lesiones[0]['error']}")
-    elif not lesiones:
-        st.info("No hay lesiones de importancia reportadas en este momento.")
-    else:
-        df_lesiones = pd.DataFrame(lesiones)
-        df_lesiones["equipo"] = df_lesiones["equipo"].map(lambda a: NOMBRES_EQUIPO.get(a, a))
-        columnas = [c for c in ["equipo", "jugador", "posicion", "estado", "detalle"] if c in df_lesiones.columns]
-        st.dataframe(df_lesiones[columnas], use_container_width=True, hide_index=True)
+    col_tabla, col_noticias = st.columns([2.4, 1], gap="medium")
+
+    with col_tabla:
+        if lesiones and "error" in lesiones[0]:
+            st.info(f"No se pudo cargar el reporte de lesiones: {lesiones[0]['error']}")
+        elif not lesiones:
+            st.info("No hay lesiones de importancia reportadas en este momento.")
+        else:
+            if equipo_filtro != "Toda la liga":
+                st.markdown(_sin_sangria(f"""
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                    <img src="{logo_url(equipo_filtro)}" width="26">
+                    <span style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem; color:#F1F4F9;">
+                        {NOMBRES_EQUIPO.get(equipo_filtro, equipo_filtro)}</span>
+                </div>
+                """), unsafe_allow_html=True)
+
+            muestra_equipo = equipo_filtro == "Toda la liga"
+            filas_html = ""
+            for i, l in enumerate(lesiones):
+                fondo = "#FFFFFF" if i % 2 == 0 else "#F1F2EE"
+                estado = l.get("estado", "") or ""
+                e_min = estado.lower()
+                if "quest" in e_min or "doubt" in e_min:
+                    color_punto = "#E8A33D"
+                elif "probable" in e_min or "active" in e_min:
+                    color_punto = "#5CB85C"
+                else:
+                    color_punto = "#D9534F"
+
+                celda_equipo = ""
+                if muestra_equipo:
+                    abbr = l.get("equipo", "")
+                    celda_equipo = f'<div style="text-align:center;"><img src="{logo_url(abbr)}" width="20"></div>'
+
+                filas_html += f"""
+                <div style="display:grid; grid-template-columns:{'40px ' if muestra_equipo else ''}1fr 60px 130px 2fr;
+                     gap:10px; align-items:center; background:{fondo}; padding:10px 8px;">
+                    {celda_equipo}
+                    <div style="color:#1B5FBF; font-weight:600; font-size:0.92rem;">{l.get('jugador', '?')}</div>
+                    <div style="color:#5A5A5A; font-size:0.85rem;">{l.get('posicion', '')}</div>
+                    <div style="font-size:0.85rem; color:#14241A;"><span style="color:{color_punto};">●</span> {estado}</div>
+                    <div style="color:#5A5A5A; font-size:0.82rem;">{l.get('detalle', '')}</div>
+                </div>"""
+
+            encabezado_cols = f"{'40px ' if muestra_equipo else ''}1fr 60px 130px 2fr"
+            encabezado_celda_equipo = '<div></div>' if muestra_equipo else ''
+            st.markdown(_sin_sangria(f"""
+            <div style="background:#FFFFFF; border-radius:10px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.3);">
+                <div style="display:grid; grid-template-columns:{encabezado_cols}; gap:10px; padding:8px 8px;
+                     border-bottom:2px solid #E4E6E1; font-size:0.75rem; font-weight:700; color:#7A7A7A; text-transform:uppercase;">
+                    {encabezado_celda_equipo}
+                    <div>Name</div><div>Pos</div><div>Status</div><div>Comment</div>
+                </div>
+                {filas_html}
+            </div>
+            """), unsafe_allow_html=True)
+
+    with col_noticias:
+        st.markdown(_sin_sangria("""
+        <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem;
+           color:#F1F4F9; margin:0 0 10px 0;">NFL News</p>
+        """), unsafe_allow_html=True)
+        with st.spinner("Cargando noticias..."):
+            noticias_mini = noticias_cacheadas(6)
+        if not (noticias_mini and "error" in noticias_mini[0]):
+            filas_noticias = ""
+            for n in noticias_mini[:6]:
+                link = n.get("link", "")
+                img_html = f'<img src="{n["imagen"]}" style="width:56px; height:56px; object-fit:cover; border-radius:6px; flex-shrink:0;">' if n.get("imagen") else ""
+                filas_noticias += f"""
+                <a href="{link}" style="text-decoration:none;">
+                <div style="display:flex; gap:10px; background:#FFFFFF; border-radius:8px;
+                     box-shadow:0 3px 6px rgba(0,0,0,0.3); padding:8px; margin-bottom:8px;">
+                    {img_html}
+                    <span style="color:#14241A; font-size:0.8rem; font-weight:600; line-height:1.3;">{n['titulo']}</span>
+                </div>
+                </a>"""
+            st.markdown(_sin_sangria(f'<div>{filas_noticias}</div>'), unsafe_allow_html=True)
 
     st.stop()
 
