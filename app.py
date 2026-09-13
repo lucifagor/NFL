@@ -203,7 +203,7 @@ def inyectar_estilos():
     }
     /* Selector de temporada (Standings) — angosto, del ancho de la palabra */
     div[class*="st-key-selector_temporada"] { max-width: 130px; }
-    div[class*="st-key-selector_lesiones"] { max-width: 230px; margin-bottom: 10px; }
+    div[class*="st-key-selector_lesiones"] { max-width: 260px; margin-bottom: 10px; }
 
     /* Todos los cuadros/casillas de información (contenedores con borde,
        métricas, tablas) del mismo gris que las tarjetas de noticias */
@@ -1134,9 +1134,11 @@ if st.session_state.pagina == "lesiones":
             equipos_por_apodo = sorted(EQUIPOS, key=lambda a: _APODOS_NFL.get(a, a))
             equipo_filtro = st.selectbox(
                 "Equipo", ["Toda la liga"] + equipos_por_apodo,
-                format_func=lambda a: "Toda la liga" if a == "Toda la liga" else f"{NOMBRES_EQUIPO.get(a, a)}",
+                format_func=lambda a: "Toda la liga" if a == "Toda la liga" else f"{NOMBRES_COMPLETOS.get(a, a)}",
                 key="equipo_lesiones", label_visibility="collapsed",
             )
+
+        muestra_equipo = equipo_filtro == "Toda la liga"
 
         if lesiones and "error" in lesiones[0]:
             st.info(f"No se pudo cargar el reporte de lesiones: {lesiones[0]['error']}")
@@ -1152,7 +1154,6 @@ if st.session_state.pagina == "lesiones":
                 </div>
                 """), unsafe_allow_html=True)
 
-            muestra_equipo = equipo_filtro == "Toda la liga"
             col_foto = "44px " if muestra_equipo else ""
             filas_html = ""
             for i, l in enumerate(lesiones):
@@ -1262,6 +1263,11 @@ if st.session_state.pagina == "lesiones":
                     st.markdown(_sin_sangria(f'<div>{filas_ausencia}</div>'), unsafe_allow_html=True)
 
     with col_noticias:
+        # Espaciador para que "Injury News" quede a la misma altura que
+        # el título del equipo (o el selector, si es "Toda la liga"), y
+        # la primera nota alineada con el inicio de la caja de jugadores.
+        alto_espaciador = 58 if muestra_equipo else 96
+        st.markdown(f'<div style="height:{alto_espaciador}px;"></div>', unsafe_allow_html=True)
         st.markdown(_sin_sangria("""
         <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem;
            color:#F1F4F9; margin:0 0 10px 0;">Injury News</p>
