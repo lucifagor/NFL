@@ -88,7 +88,10 @@ def inyectar_estilos():
     }}
     [data-testid="stAppViewContainer"] > .main {{ background: transparent; overflow-x: hidden; }}
     html, body {{ overflow-x: hidden; max-width: 100%; }}
-    [data-testid="stMainBlockContainer"], .block-container {{ max-width: 100%; overflow-x: hidden; }}
+    [data-testid="stMainBlockContainer"], .block-container {{
+        max-width: 96vw !important; margin-left: auto !important; margin-right: auto !important;
+        overflow-x: hidden;
+    }}
     * {{ box-sizing: border-box; }}
     </style>
     """), unsafe_allow_html=True)
@@ -808,7 +811,7 @@ if st.session_state.pagina == "inicio":
     principales = noticias[:10] if not (noticias and "error" in noticias[0]) else noticias
     pasadas = noticias[10:30] if not (noticias and "error" in noticias[0]) else []
 
-    col_lista, col_principal = st.columns([1, 3], gap="large")
+    col_lista, col_principal, col_aire = st.columns([1, 2.5, 0.3], gap="large")
 
     with col_lista:
         filas_html = ""
