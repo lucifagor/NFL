@@ -769,12 +769,23 @@ def obtener_standings_api_sports(api_key: str, season: int) -> pd.DataFrame:
         puntos = item.get("points") or {}
         v, d, e = item.get("won", 0) or 0, item.get("lost", 0) or 0, item.get("ties", 0) or 0
         total = v + d + e
+
+        # Récord local/visitante — el nombre exacto del campo puede variar
+        # según la respuesta de API-Sports; si no viene, cae a "0-0" en
+        # vez de tronar.
+        records = item.get("records") or {}
+        home_rec = records.get("home") or {}
+        away_rec = records.get("away") or {}
+        loc_txt = f"{home_rec.get('won', 0)}-{home_rec.get('lost', 0)}" if home_rec else "0-0"
+        vis_txt = f"{away_rec.get('won', 0)}-{away_rec.get('lost', 0)}" if away_rec else "0-0"
+
         filas.append({
             "Conferencia": "AFC" if "American" in (item.get("conference") or "") else "NFC",
             "División": item.get("division", "?"),
             "Equipo": abbr,
             "V": v, "D": d, "E": e,
             "PF": puntos.get("for", 0), "PC": puntos.get("against", 0),
+            "Loc": loc_txt, "Vis": vis_txt,
             "Racha": item.get("streak", "") or "",
             "% Victorias": round((v + 0.5 * e) / total * 100, 1) if total else 0.0,
         })
@@ -924,6 +935,22 @@ _DIVISIONES_NFL = {
 }
 
 
+def _calcular_racha(resultados: list) -> str:
+    """A partir de una lista cronológica de 'V'/'D'/'E', arma el texto de
+    racha actual (ej. 'W3', 'L1') igual que el formato de API-Sports."""
+    if not resultados:
+        return ""
+    ultimo = resultados[-1]
+    conteo = 0
+    for r in reversed(resultados):
+        if r == ultimo:
+            conteo += 1
+        else:
+            break
+    letra = {"V": "W", "D": "L", "E": "T"}.get(ultimo, "")
+    return f"{letra}{conteo}"
+
+
 def obtener_standings(season: int) -> pd.DataFrame:
     """
     Calcula la tabla de posiciones (V-D-E por equipo) a partir de los
@@ -940,23 +967,46 @@ def obtener_standings(season: int) -> pd.DataFrame:
     jugados = sched[sched["home_score"].notna() & sched["away_score"].notna()]
     if jugados.empty:
         raise ValueError(f"Todavía no se ha jugado ningún partido en la temporada {season}.")
+    jugados = jugados.sort_values(["week"])  # orden cronológico, para calcular la racha
 
-    registros = {equipo: {"V": 0, "D": 0, "E": 0} for equipo in _DIVISIONES_NFL}
+    def _registro_vacio():
+        return {"V": 0, "D": 0, "E": 0, "PF": 0, "PC": 0,
+                "loc_v": 0, "loc_d": 0, "loc_e": 0,
+                "vis_v": 0, "vis_d": 0, "vis_e": 0, "resultados": []}
+
+    registros = {equipo: _registro_vacio() for equipo in _DIVISIONES_NFL}
     for _, partido in jugados.iterrows():
         home, away = partido["home_team"], partido["away_team"]
         hs, aw = partido["home_score"], partido["away_score"]
         for equipo in (home, away):
-            registros.setdefault(equipo, {"V": 0, "D": 0, "E": 0})
+            registros.setdefault(equipo, _registro_vacio())
+
+        registros[home]["PF"] += hs
+        registros[home]["PC"] += aw
+        registros[away]["PF"] += aw
+        registros[away]["PC"] += hs
 
         if hs > aw:
             registros[home]["V"] += 1
+            registros[home]["loc_v"] += 1
+            registros[home]["resultados"].append("V")
             registros[away]["D"] += 1
+            registros[away]["vis_d"] += 1
+            registros[away]["resultados"].append("D")
         elif aw > hs:
             registros[away]["V"] += 1
+            registros[away]["vis_v"] += 1
+            registros[away]["resultados"].append("V")
             registros[home]["D"] += 1
+            registros[home]["loc_d"] += 1
+            registros[home]["resultados"].append("D")
         else:
             registros[home]["E"] += 1
+            registros[home]["loc_e"] += 1
+            registros[home]["resultados"].append("E")
             registros[away]["E"] += 1
+            registros[away]["vis_e"] += 1
+            registros[away]["resultados"].append("E")
 
     filas = []
     for equipo, rec in registros.items():
@@ -967,6 +1017,9 @@ def obtener_standings(season: int) -> pd.DataFrame:
             "División": division,
             "Equipo": equipo,
             "V": rec["V"], "D": rec["D"], "E": rec["E"],
+            "PF": int(rec["PF"]), "PC": int(rec["PC"]),
+            "Loc": f"{rec['loc_v']}-{rec['loc_d']}", "Vis": f"{rec['vis_v']}-{rec['vis_d']}",
+            "Racha": _calcular_racha(rec["resultados"]),
             "% Victorias": round((rec["V"] + 0.5 * rec["E"]) / total * 100, 1) if total else 0.0,
         })
 

@@ -198,6 +198,21 @@ def inyectar_estilos():
         color: #3A3A3A; font-size: 0.88rem; margin: 0;
         display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
     }
+    /* Selector de temporada (Standings) — angosto, del ancho de la palabra */
+    div[class*="st-key-selector_temporada"] { max-width: 130px; }
+
+    /* Todos los cuadros/casillas de información (contenedores con borde,
+       métricas, tablas) del mismo gris que las tarjetas de noticias */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background: #D8DBD4 !important; border-color: #AEB4A9 !important; border-radius: 8px !important;
+    }
+    [data-testid="stMetric"] {
+        background: #D8DBD4; border-radius: 8px; padding: 10px 12px;
+    }
+    [data-testid="stMetric"] label, [data-testid="stMetric"] [data-testid="stMetricValue"] {
+        color: #14241A !important;
+    }
+    [data-testid="stDataFrame"] { background: #D8DBD4; border-radius: 8px; }
     </style>
     """), unsafe_allow_html=True)
 
@@ -266,6 +281,7 @@ def ticker_marcadores(partidos: list, standings: pd.DataFrame = None):
             linea1 = _fecha_hora_local(p) or "Por confirmar"
             linea2 = p.get("estadio", "")
         tarjetas += f"""
+        <a href="?partido={p['away_abbr']}-{p['home_abbr']}" target="_self" style="text-decoration:none; color:inherit;">
         <div class="ticker-juego">
             <div class="ticker-equipos">
                 <div class="ticker-equipo">
@@ -281,7 +297,8 @@ def ticker_marcadores(partidos: list, standings: pd.DataFrame = None):
                 <div class="ticker-estado">{linea1}</div>
                 {f'<div class="ticker-estadio">{linea2}</div>' if linea2 else ''}
             </div>
-        </div>"""
+        </div>
+        </a>"""
     st.markdown(_sin_sangria(f'<div class="ticker-marcadores">{tarjetas}</div>'), unsafe_allow_html=True)
 
 
@@ -349,11 +366,12 @@ def marca_compacta():
 
 
 _SECCIONES_NAV = [
-    ("inicio", "Noticias"),
+    ("inicio", "News"),
     ("estadisticas", "Standings"),
-    ("lesiones", "Lesiones"),
-    ("pronosticos", "Pronósticos"),
+    ("lesiones", "Injuries"),
+    ("pronosticos", "Predictions"),
     ("fantasy", "Fantasy"),
+    ("blog", "Blog"),
 ]
 
 
@@ -441,11 +459,22 @@ def nombre_equipo(abbr: str) -> str:
 def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header: str, color_borde: str) -> str:
     """Genera una tabla de una división al estilo gráfico de transmisión
     deportiva: sub-encabezado en tono claro, filas oscuras, borde de color
-    alrededor de toda la división (calcado del formato de referencia)."""
+    redondeado alrededor de toda la división. Incluye G/P/E/%/PF/PC/Loc./Vis./Racha
+    (estas últimas cinco en gris, a modo de datos secundarios)."""
+    tiene_extra = "PF" in filas.columns
+
     filas_html = ""
     for _, row in filas.iterrows():
         pct = row["% Victorias"] / 100
         pct_txt = "-" if row["V"] == 0 else f"{pct:.3f}".lstrip("0")
+        extra_html = ""
+        if tiene_extra:
+            extra_html = f"""
+            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('PF', '')}</td>
+            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('PC', '')}</td>
+            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('Loc', '')}</td>
+            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('Vis', '')}</td>
+            <td style="text-align:center; color:#9CB3A3; background:#14241A; white-space:nowrap; font-size:0.85rem;">{row.get('Racha', '')}</td>"""
         filas_html += f"""
         <tr>
             <td style="padding:6px 6px; background:#14241A;"><img src="{logo_url(row['Equipo'])}" width="24" style="vertical-align:middle;"></td>
@@ -454,22 +483,34 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
             <td style="text-align:center; color:#E4E8EF; background:#14241A; white-space:nowrap;">{row['D']}</td>
             <td style="text-align:center; color:#E4E8EF; background:#14241A; white-space:nowrap;">{row['E']}</td>
             <td style="text-align:center; color:#E4E8EF; font-weight:600; background:#14241A; white-space:nowrap;">{pct_txt}</td>
+            {extra_html}
         </tr>"""
 
+    columnas_extra_header = ""
+    colgroup_extra = ""
+    if tiene_extra:
+        columnas_extra_header = "".join(
+            f'<td style="text-align:center; color:#9CB3A3; font-weight:700; font-size:0.75rem; white-space:nowrap;">{c}</td>'
+            for c in ["PF", "PC", "Loc.", "Vis.", "Racha"]
+        )
+        colgroup_extra = "".join('<col style="width:52px;">' for _ in range(5))
+
     return _sin_sangria(f"""
-    <div style="border:3px solid {color_borde}; border-radius:4px; overflow:hidden; margin-bottom:20px; min-width:420px;">
+    <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; min-width:420px;">
     <table style="width:100%; border-collapse:collapse; font-family:'Inter',sans-serif; table-layout:fixed;">
         <colgroup>
             <col style="width:42px;"><col><col style="width:46px;">
             <col style="width:46px;"><col style="width:46px;"><col style="width:72px;">
+            {colgroup_extra}
         </colgroup>
         <tr style="background:{color_header};">
             <td colspan="2" style="padding:8px 10px; color:white; font-weight:700; white-space:nowrap;
-                font-family:'Barlow Condensed',sans-serif; font-size:1.1rem;">{nombre_division}</td>
+                font-family:'Barlow Condensed',sans-serif; font-size:1.1rem; border-radius:9px 0 0 0;">{nombre_division}</td>
             <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">G</td>
             <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">P</td>
             <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">E</td>
             <td style="text-align:center; color:white; font-weight:700; font-size:0.8rem; white-space:nowrap;">.PCT</td>
+            {columnas_extra_header}
         </tr>
         {filas_html}
     </table>
@@ -767,6 +808,21 @@ if st.query_params.get("equipo"):
     st.session_state.pagina = "equipo_detalle"
     st.query_params.clear()
 
+# Cada cuadrícula del ticker de resultados es un hipervínculo real
+# (?partido=AWAY-HOME) a nuestra pantalla de detalle/comparación de ese
+# partido — usa el mismo patrón de navegación por URL que los equipos.
+if st.query_params.get("partido"):
+    try:
+        away_p, home_p = st.query_params["partido"].split("-")
+        st.session_state.detalle_partido = {
+            "away": away_p, "home": home_p,
+            "season": datetime.date.today().year, "temporadas_historicas": 0,
+        }
+        st.session_state.pagina = "detalle"
+    except Exception:
+        pass
+    st.query_params.clear()
+
 # Detecta la zona horaria del navegador de quien ve la app (una sola vez
 # por sesión) para mostrar los horarios de los partidos convertidos a su
 # hora local, en vez de la hora cruda (UTC) que da la API. Mientras se
@@ -803,7 +859,7 @@ if st.session_state.pagina == "inicio":
     encabezado_sitio("inicio")
 
     hero(
-        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#BD4E1E;">News</span>',
+        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">News</span>',
     )
 
     with st.spinner("Cargando noticias..."):
@@ -847,8 +903,8 @@ if st.session_state.pagina == "equipo_detalle":
         st.rerun()
 
     hero(
-        f'<span style="color:#F1F4F9;">{NOMBRES_EQUIPO.get(equipo_sel, equipo_sel)}</span> '
-        f'<span style="color:#BD4E1E;">({equipo_sel})</span>',
+        '<span style="color:#F1F4F9;">NFL</span> '
+        f'<span style="color:#BD4E1E;">{NOMBRES_EQUIPO.get(equipo_sel, equipo_sel)} ({equipo_sel})</span>',
     )
     st.image(logo_url(equipo_sel), width=90)
 
@@ -888,7 +944,7 @@ if st.session_state.pagina == "equipo_detalle":
 if st.session_state.pagina == "lesiones":
     encabezado_sitio("lesiones")
     hero(
-        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#BD4E1E;">Injuries</span>',
+        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Injuries</span>',
         "Reporte de lesiones recientes de toda la liga.",
     )
 
@@ -914,20 +970,19 @@ if st.session_state.pagina == "lesiones":
 # ============================================================
 if st.session_state.pagina == "estadisticas":
     encabezado_sitio("estadisticas")
-    hero("Tabla de posiciones")
-    season_standings = st.number_input(
-        "Temporada", min_value=2015, max_value=2027,
-        value=datetime.date.today().year, key="season_standings",
-    )
+    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Standings</span>')
+
+    with st.container(key="selector_temporada"):
+        season_standings = st.number_input(
+            "Temporada", min_value=2015, max_value=2027,
+            value=datetime.date.today().year, key="season_standings",
+        )
     with st.spinner("Cargando tabla de posiciones..."):
         try:
             standings = standings_cacheados(season_standings, api_key=API_SPORTS_KEY)
             if standings.empty:
                 st.info("No se pudo cargar la tabla de posiciones.")
             else:
-                if API_SPORTS_KEY and "PF" in standings.columns:
-                    st.caption("📡 Datos oficiales en tiempo real vía API-Sports")
-
                 # Si subes tu propio archivo de logo (con derecho de uso) a la
                 # carpeta del repo, pon aquí la ruta o URL y se muestra al
                 # centro entre AFC y NFC. Vacío = no se muestra nada ahí.
@@ -1014,7 +1069,7 @@ if st.session_state.pagina == "detalle":
 if st.session_state.pagina == "fantasy":
     encabezado_sitio("fantasy")
     hero(
-        '<span style="color:#F1F4F9;">NFL Warriors</span> <span style="color:#BD4E1E;">Fantasy</span>',
+        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Fantasy</span>',
         "Jugadores destacados de la temporada — por equipo y por posición.",
     )
 
@@ -1080,10 +1135,27 @@ if st.session_state.pagina == "fantasy":
 
 
 # ============================================================
+# PANTALLA: BLOG — sección nueva, contenido aún por definir
+# ============================================================
+if st.session_state.pagina == "blog":
+    encabezado_sitio("blog")
+    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Blog</span>')
+    st.info(
+        "Todavía no hay nada armado aquí — dime qué te gustaría ver "
+        "(artículos de opinión, análisis a fondo, columnas de autor, etc.) "
+        "y lo construimos."
+    )
+    st.stop()
+
+
+# ============================================================
 # PANTALLA: PRONÓSTICOS (lo que antes era la app completa)
 # ============================================================
 encabezado_sitio("pronosticos")
-hero("Comparador de equipos", "Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.")
+hero(
+    '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Predictions</span>',
+    "Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.",
+)
 
 # --- Ajustes del modelo: desplegable, solo visible en esta sección (no en el sidebar global) ---
 with st.expander("⚙️ Ajustes del modelo (temporadas históricas y pesos)"):
