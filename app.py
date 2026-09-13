@@ -1137,9 +1137,14 @@ if st.session_state.pagina == "estadisticas":
                 agregado_conf = agregar_standings_por_conferencia(standings)
 
                 # Orden fijo Este / Norte / Oeste / Sur (no por % de victorias).
-                orden_div = {"Este": 0, "Norte": 1, "Oeste": 2, "Sur": 3}
-                agregado_div["_orden"] = agregado_div["División"].str.split().str[-1].map(orden_div)
-                agregado_div = agregado_div.sort_values("_orden")
+                def _orden_division(nombre_div: str) -> int:
+                    for palabra, num in [("Este", 0), ("Norte", 1), ("Oeste", 2), ("Sur", 3)]:
+                        if palabra in str(nombre_div):
+                            return num
+                    return 99
+
+                agregado_div["_orden"] = agregado_div["División"].apply(_orden_division)
+                agregado_div = agregado_div.sort_values("_orden", kind="mergesort").reset_index(drop=True)
 
                 col_afc2, col_nfc2 = st.columns(2)
                 with col_afc2:
