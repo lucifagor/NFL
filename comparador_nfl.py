@@ -865,6 +865,7 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
             "estado": estado,
             "fecha": (j.get("game") or {}).get("date", {}).get("date", ""),
             "hora": (j.get("game") or {}).get("date", {}).get("time", ""),
+            "timestamp": (j.get("game") or {}).get("date", {}).get("timestamp"),
             "estadio": venue.get("name", ""),
             "ciudad": venue.get("city", ""),
         })

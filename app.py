@@ -21,6 +21,8 @@ Este archivo reutiliza toda la lógica de comparador_nfl.py (no la duplica).
 import streamlit as st
 import pandas as pd
 import datetime
+from zoneinfo import ZoneInfo
+import streamlit.components.v1 as components
 
 from comparador_nfl import (
     obtener_stats_temporada,
@@ -206,6 +208,23 @@ def _fecha_corta(fecha_iso: str) -> str:
         return fecha_iso
 
 
+def _fecha_hora_local(p: dict) -> str:
+    """Convierte el timestamp UTC del partido a la zona horaria detectada
+    del navegador (o America/Cancun por default) — así el horario que se
+    ve es el real de quien está viendo la app, no la hora cruda de la
+    API (que viene en UTC)."""
+    ts = p.get("timestamp")
+    if ts:
+        try:
+            zona = st.session_state.get("zona_horaria", "America/Cancun")
+            local = datetime.datetime.fromtimestamp(ts, tz=ZoneInfo(zona))
+            return f"{local.day} {_MESES_ES[local.month]} · {local.strftime('%H:%M')}"
+        except Exception:
+            pass
+    # Respaldo si no hay timestamp (ej. viene del fallback de ESPN).
+    return " · ".join(x for x in [_fecha_corta(p["fecha"]) if p.get("fecha") else "", p.get("hora", "")] if x)
+
+
 def ticker_marcadores(partidos: list, standings: pd.DataFrame = None):
     """Renderiza el ticker horizontal de marcadores estilo NFL.com.
     Si el partido no se ha jugado, en vez de '-' muestra el récord
@@ -226,8 +245,7 @@ def ticker_marcadores(partidos: list, standings: pd.DataFrame = None):
             linea1 = "Final" if p["estado"] == "FT" else "Final (OT)"
             linea2 = ""
         else:
-            fecha_hora = " · ".join(x for x in [_fecha_corta(p["fecha"]) if p.get("fecha") else "", p.get("hora", "")] if x)
-            linea1 = fecha_hora or "Por confirmar"
+            linea1 = _fecha_hora_local(p) or "Por confirmar"
             linea2 = p.get("estadio", "")
         tarjetas += f"""
         <div class="ticker-juego">
@@ -544,17 +562,17 @@ def lista_equipos_sidebar():
 
         tarjetas = "".join(
             f'''<a href="?equipo={abbr}" target="_self" style="text-decoration:none;">
-                <div style="max-width:44px; margin:0 auto; background:#D8DBD4; border:1px solid #AEB4A9;
+                <div style="max-width:56px; margin:0 auto; background:#D8DBD4; border:1px solid #AEB4A9;
                      border-radius:8px; box-shadow:0 3px 0 #8B9187, 0 5px 8px rgba(0,0,0,0.3);
-                     padding:3px 1px 2px 1px; text-align:center;">
-                    <img src="{logo_url(abbr)}" style="width:40px; height:auto; display:block; margin:0 auto 1px auto;">
-                    <span style="font-weight:700; color:#14241A; font-size:0.52rem;">{abbr}</span>
+                     padding:4px 2px 3px 2px; text-align:center;">
+                    <img src="{logo_url(abbr)}" style="width:34px; height:auto; display:block; margin:0 auto 0 auto;">
+                    <span style="font-weight:700; color:#14241A; font-size:1.5rem; line-height:1; display:block; margin-top:-2px;">{abbr}</span>
                 </div>
             </a>'''
             for abbr in equipos_division
         )
         st.markdown(_sin_sangria(f"""
-        <div style="display:flex; justify-content:space-between; gap:4px; margin-bottom:8px;">{tarjetas}</div>
+        <div style="display:flex; justify-content:flex-start; gap:3px; margin-bottom:6px;">{tarjetas}</div>
         """), unsafe_allow_html=True)
 
 
@@ -643,7 +661,7 @@ def marcadores_cacheados(season: int, api_key: str = ""):
             "away_score": p["away_score"] if p["away_score"] not in ("-", "", None) else None,
             "home_score": p["home_score"] if p["home_score"] not in ("-", "", None) else None,
             "estado": "FT" if "final" in p.get("estado", "").lower() else "NS",
-            "fecha": p.get("fecha", ""), "hora": "", "estadio": "", "ciudad": "",
+            "fecha": p.get("fecha", ""), "hora": "", "timestamp": None, "estadio": "", "ciudad": "",
         }
         for p in crudo
     ]
@@ -754,6 +772,30 @@ if st.query_params.get("equipo"):
     st.session_state.equipo_detalle = st.query_params["equipo"]
     st.session_state.pagina = "equipo_detalle"
     st.query_params.clear()
+
+# Detecta la zona horaria del navegador de quien ve la app (una sola vez
+# por sesión) para mostrar los horarios de los partidos convertidos a su
+# hora local, en vez de la hora cruda (UTC) que da la API. Mientras se
+# detecta, usa America/Cancun como valor por default.
+if "zona_horaria" not in st.session_state:
+    tz_detectada = st.query_params.get("tz")
+    if tz_detectada:
+        st.session_state.zona_horaria = tz_detectada
+        st.query_params.pop("tz", None)
+    else:
+        st.session_state.zona_horaria = "America/Cancun"
+        components.html("""
+        <script>
+        try {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const url = new URL(window.parent.location.href);
+            if (url.searchParams.get('tz') !== tz) {
+                url.searchParams.set('tz', tz);
+                window.parent.location.href = url.toString();
+            }
+        } catch (e) {}
+        </script>
+        """, height=0)
 
 if not NFL_DATA_PY_OK:
     st.error("nfl_data_py no está instalado en este entorno. Ejecuta: pip install nfl_data_py")
