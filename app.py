@@ -40,6 +40,8 @@ from comparador_nfl import (
     obtener_lesiones_liga,
     obtener_lesiones_liga_api_sports,
     obtener_lesiones_espn,
+    obtener_posiciones_liga,
+    _APODOS_NFL,
     obtener_standings,
     obtener_standings_api_sports,
     obtener_marcadores_actuales,
@@ -201,6 +203,7 @@ def inyectar_estilos():
     }
     /* Selector de temporada (Standings) — angosto, del ancho de la palabra */
     div[class*="st-key-selector_temporada"] { max-width: 130px; }
+    div[class*="st-key-selector_lesiones"] { max-width: 230px; margin-bottom: 10px; }
 
     /* Todos los cuadros/casillas de información (contenedores con borde,
        métricas, tablas) del mismo gris que las tarjetas de noticias */
@@ -792,6 +795,11 @@ def lesiones_equipo_cacheadas(team_abbr: str):
     return obtener_lesiones_espn(team_abbr)
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def posiciones_liga_cacheadas(season: int):
+    return obtener_posiciones_liga(season)
+
+
 def lesiones_equipo_con_respaldo(team_abbr: str, season: int, api_key: str) -> list:
     """Intenta el endpoint de ESPN por equipo primero; si viene vacío
     (el endpoint por equipo no siempre responde bien), cae a filtrar el
@@ -1088,21 +1096,18 @@ if st.session_state.pagina == "lesiones":
 
     season_lesiones = datetime.date.today().year
 
-    col_sel_izq, col_selector, col_sel_der = st.columns([1, 1, 1])
-    with col_selector:
-        equipo_filtro = st.selectbox(
-            "Team Injuries",
-            ["Toda la liga"] + EQUIPOS,
-            format_func=lambda a: "Toda la liga" if a == "Toda la liga" else f"{NOMBRES_EQUIPO.get(a, a)}",
-            key="equipo_lesiones",
-        )
-
     with st.spinner("Cargando lesiones..."):
-        if equipo_filtro == "Toda la liga":
+        if st.session_state.get("equipo_lesiones", "Toda la liga") == "Toda la liga":
             lesiones = lesiones_liga_cacheadas(season=season_lesiones, api_key=API_SPORTS_KEY)
             lesiones = lesiones[:10] if lesiones and "error" not in lesiones[0] else lesiones
         else:
-            lesiones = lesiones_equipo_con_respaldo(equipo_filtro, season_lesiones, API_SPORTS_KEY)
+            lesiones = lesiones_equipo_con_respaldo(
+                st.session_state.get("equipo_lesiones"), season_lesiones, API_SPORTS_KEY,
+            )
+
+        # Respaldo de posición: si la fuente de lesiones no la trae, se
+        # busca por nombre en el roster completo de la liga (nfl_data_py).
+        posiciones_respaldo = posiciones_liga_cacheadas(season_lesiones)
 
         # Set de nombres "relevantes en fantasy" (líderes de la liga y
         # titulares QB1/RB1/WR1/TE1 de cada equipo) para la columna Fantasy.
@@ -1125,6 +1130,14 @@ if st.session_state.pagina == "lesiones":
     col_tabla, col_noticias = st.columns([2.4, 1], gap="medium")
 
     with col_tabla:
+        with st.container(key="selector_lesiones"):
+            equipos_por_apodo = sorted(EQUIPOS, key=lambda a: _APODOS_NFL.get(a, a))
+            equipo_filtro = st.selectbox(
+                "Equipo", ["Toda la liga"] + equipos_por_apodo,
+                format_func=lambda a: "Toda la liga" if a == "Toda la liga" else f"{NOMBRES_EQUIPO.get(a, a)}",
+                key="equipo_lesiones", label_visibility="collapsed",
+            )
+
         if lesiones and "error" in lesiones[0]:
             st.info(f"No se pudo cargar el reporte de lesiones: {lesiones[0]['error']}")
         elif not lesiones:
@@ -1175,7 +1188,7 @@ if st.session_state.pagina == "lesiones":
                     if es_fantasy else '<div></div>'
                 )
 
-                posicion_txt = l.get("posicion", "") or "—"
+                posicion_txt = l.get("posicion", "") or posiciones_respaldo.get(l.get("jugador", ""), "") or "—"
 
                 filas_html += f"""
                 <div style="display:grid; grid-template-columns:{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 1.6fr 60px;
@@ -1204,16 +1217,79 @@ if st.session_state.pagina == "lesiones":
             </div>
             """), unsafe_allow_html=True)
 
+            # Otras ausencias que no son lesión (suspensiones, motivos
+            # personales, etc.) — no vienen del reporte oficial de
+            # lesiones, así que se buscan por palabra clave en las
+            # noticias (del equipo si hay uno elegido, si no de la liga).
+            # Es un listado de titulares, no datos estructurados como la
+            # tabla de arriba.
+            palabras_ausencia = [
+                "suspend", "suspension", "suspendido", "suspensión",
+                "banned", "released", "cut by", "personal reasons",
+                "not with the team", "away from the team",
+            ]
+
+            def _es_de_ausencia(n):
+                texto = f"{n.get('titulo', '')} {n.get('descripcion', '')}".lower()
+                return any(p in texto for p in palabras_ausencia)
+
+            noticias_ausencia_fuente = noticias_cacheadas(30)
+            if not (noticias_ausencia_fuente and "error" in noticias_ausencia_fuente[0]):
+                if muestra_equipo:
+                    ausencias = [n for n in noticias_ausencia_fuente if _es_de_ausencia(n)][:5]
+                else:
+                    apodo = _APODOS_NFL.get(equipo_filtro, "").lower()
+                    ausencias = [
+                        n for n in noticias_ausencia_fuente
+                        if _es_de_ausencia(n) and apodo in f"{n.get('titulo', '')} {n.get('descripcion', '')}".lower()
+                    ][:5]
+
+                if ausencias:
+                    st.markdown(_sin_sangria("""
+                    <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1rem;
+                       color:#F1F4F9; margin:16px 0 8px 0;">Otras ausencias (no por lesión)</p>
+                    """), unsafe_allow_html=True)
+                    filas_ausencia = ""
+                    for n in ausencias:
+                        link = n.get("link", "")
+                        filas_ausencia += f"""
+                        <a href="{link}" style="text-decoration:none;">
+                        <div style="background:#FFFFFF; border-radius:8px; box-shadow:0 3px 6px rgba(0,0,0,0.3);
+                             padding:8px 10px; margin-bottom:6px;">
+                            <span style="color:#14241A; font-size:0.85rem; font-weight:600;">{n['titulo']}</span>
+                        </div>
+                        </a>"""
+                    st.markdown(_sin_sangria(f'<div>{filas_ausencia}</div>'), unsafe_allow_html=True)
+
     with col_noticias:
         st.markdown(_sin_sangria("""
         <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem;
-           color:#F1F4F9; margin:0 0 10px 0;">NFL News</p>
+           color:#F1F4F9; margin:0 0 10px 0;">Injury News</p>
         """), unsafe_allow_html=True)
         with st.spinner("Cargando noticias..."):
-            noticias_mini = noticias_cacheadas(6)
-        if not (noticias_mini and "error" in noticias_mini[0]):
+            noticias_todas = noticias_cacheadas(30)
+
+        palabras_lesion = [
+            "injury", "injured", "hurt", "out for", "sidelined", "ir ", "injured reserve",
+            "surgery", "return", "recovery", "recovering", "questionable", "doubtful",
+            "ruled out", "torn", "sprain", "fracture", "concussion", "acl", "achilles",
+            "lesión", "lesionado", "cirugía", "recuperación", "baja",
+        ]
+
+        def _es_de_lesion(n):
+            texto = f"{n.get('titulo', '')} {n.get('descripcion', '')}".lower()
+            return any(p in texto for p in palabras_lesion)
+
+        if noticias_todas and "error" in noticias_todas[0]:
+            noticias_mini = []
+        else:
+            noticias_mini = [n for n in noticias_todas if _es_de_lesion(n)][:6]
+
+        if not noticias_mini:
+            st.caption("No hay noticias de lesiones en este momento.")
+        else:
             filas_noticias = ""
-            for n in noticias_mini[:6]:
+            for n in noticias_mini:
                 link = n.get("link", "")
                 img_html = f'<img src="{n["imagen"]}" style="width:56px; height:56px; object-fit:cover; border-radius:6px; flex-shrink:0;">' if n.get("imagen") else ""
                 filas_noticias += f"""
