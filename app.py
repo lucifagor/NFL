@@ -177,12 +177,13 @@ def inyectar_estilos():
     .noticia-card {
         background: #D8DBD4; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.35);
         padding: 14px; text-align: center; margin-bottom: 14px;
-        display: flex; flex-direction: column; height: 340px;
+        display: flex; flex-direction: column; height: 360px; overflow: hidden;
     }
+    .noticia-card img { flex-shrink: 0; }
     .noticia-card p { color: #14241A; }
     .noticia-card a { color: #BD4E1E; font-weight: 700; text-decoration: underline; }
     .noticia-titulo {
-        font-weight: 700; margin: 10px 0 6px 0; font-size: 1rem;
+        font-weight: 700; margin: 10px 0 6px 0; font-size: 1rem; flex-shrink: 0;
         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
     .noticia-desc {
@@ -578,8 +579,8 @@ def renderizar_noticias(noticias: list):
                     imagen_html = ""
                     if n.get("imagen"):
                         img_tag = f"""
-                        <div style="position:relative;">
-                            <img src="{n['imagen']}" style="width:100%; aspect-ratio:16/10;
+                        <div style="position:relative; flex-shrink:0;">
+                            <img src="{n['imagen']}" style="width:100%; height:180px;
                                  object-fit:cover; border-radius:6px; display:block;">
                             {f'<span style="position:absolute; bottom:6px; right:8px; background:rgba(0,0,0,0.6); color:#FFFFFF; font-size:0.68rem; padding:2px 7px; border-radius:4px;">{fuente}</span>' if fuente else ''}
                         </div>"""
