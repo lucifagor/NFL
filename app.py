@@ -811,7 +811,7 @@ if st.session_state.pagina == "inicio":
     principales = noticias[:10] if not (noticias and "error" in noticias[0]) else noticias
     pasadas = noticias[10:30] if not (noticias and "error" in noticias[0]) else []
 
-    col_lista, col_principal, col_aire = st.columns([1, 2.5, 0.3], gap="large")
+    col_lista, col_principal, col_aire = st.columns([0.7, 2.6, 0.3], gap="large")
 
     with col_lista:
         filas_html = ""
@@ -820,11 +820,12 @@ if st.session_state.pagina == "inicio":
             titulo_html = f'<a href="{link}" style="color:#14241A; text-decoration:none; font-weight:700;">{n["titulo"]}</a>' if link else n["titulo"]
             filas_html += f"""
             <div style="background:#D8DBD4; border-radius:8px; box-shadow:0 3px 6px rgba(0,0,0,0.3);
-                 padding:10px 12px; margin-bottom:8px; max-width:100%; overflow:hidden; box-sizing:border-box;">
-                <span style="font-size:0.88rem; line-height:1.4; color:#14241A;
-                     word-wrap:break-word; overflow-wrap:break-word; white-space:normal;">🏈 {titulo_html}</span>
+                 padding:10px 12px; margin-bottom:8px; width:100%; max-width:100%; overflow:hidden;
+                 box-sizing:border-box; text-align:left;">
+                <span style="font-size:0.85rem; line-height:1.4; color:#14241A; text-align:left;
+                     display:block; word-break:break-word; overflow-wrap:anywhere; white-space:normal;">🏈 {titulo_html}</span>
             </div>"""
-        st.markdown(_sin_sangria(f'<div style="max-width:100%; overflow:hidden;">{filas_html}</div>'), unsafe_allow_html=True)
+        st.markdown(_sin_sangria(f'<div style="width:100%; max-width:100%; overflow:hidden;">{filas_html}</div>'), unsafe_allow_html=True)
 
     with col_principal:
         renderizar_noticias(principales)
