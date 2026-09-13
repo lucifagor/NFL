@@ -414,11 +414,13 @@ def barra_navegacion(activo: str):
     st.markdown('<hr style="border-color:#26402F; margin-top:0; margin-bottom:6px;">', unsafe_allow_html=True)
 
 
-def encabezado_sitio(activo: str):
-    """Encabezado compartido por TODA la app: franja de campo, resultados
-    de la semana, menú de navegación, y la fila de logos de equipo — se
-    ve igual arriba de cualquier pantalla en la que estés."""
-    franja_campo()
+@st.fragment(run_every="60s")
+def _ticker_con_auto_refresco():
+    """Este pedazo de la página se vuelve a ejecutar solo cada 60
+    segundos (sin recargar ni perder el resto de la pantalla), así que
+    los resultados se actualizan sin que el usuario tenga que hacer
+    nada. El caché de marcadores_cacheados dura 5 min, así que en la
+    práctica los datos nuevos llegan cada vez que la API los actualiza."""
     with st.spinner("Cargando marcadores..."):
         partidos_ticker = marcadores_cacheados(datetime.date.today().year, api_key=API_SPORTS_KEY)
         try:
@@ -426,6 +428,14 @@ def encabezado_sitio(activo: str):
         except Exception:
             standings_ticker = None
     ticker_marcadores(partidos_ticker, standings_ticker)
+
+
+def encabezado_sitio(activo: str):
+    """Encabezado compartido por TODA la app: franja de campo, resultados
+    de la semana, menú de navegación, y la fila de logos de equipo — se
+    ve igual arriba de cualquier pantalla en la que estés."""
+    franja_campo()
+    _ticker_con_auto_refresco()
     logo_grande_centrado()
     barra_navegacion(activo)
     fila_equipos_alfabetica()
@@ -808,7 +818,7 @@ def standings_cacheados(season: int, api_key: str = ""):
     return obtener_standings(season)
 
 
-@st.cache_data(show_spinner=False, ttl=300)
+@st.cache_data(show_spinner=False, ttl=60)
 def marcadores_cacheados(season: int, api_key: str = ""):
     """Marcadores de la semana actual — API-Sports si hay key (más
     confiable, incluye el marcador exacto); si no, respaldo con ESPN."""
