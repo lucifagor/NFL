@@ -1168,6 +1168,13 @@ if st.session_state.pagina == "lesiones":
                         {NOMBRES_EQUIPO.get(equipo_filtro, equipo_filtro)}</span>
                 </div>
                 """), unsafe_allow_html=True)
+            else:
+                st.markdown(_sin_sangria(f"""
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                    <img src="{LOGO_ESCUDO_URL}" width="26">
+                    <span style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem; color:#F1F4F9;">NFL</span>
+                </div>
+                """), unsafe_allow_html=True)
 
             col_foto = "44px " if muestra_equipo else ""
             filas_html = ""
@@ -1293,10 +1300,9 @@ if st.session_state.pagina == "lesiones":
 
     with col_noticias:
         # Espaciador para que "Injury News" quede a la misma altura que
-        # el título del equipo (o el selector, si es "Toda la liga"), y
-        # la primera nota alineada con el inicio de la caja de jugadores.
-        alto_espaciador = 58 if muestra_equipo else 96
-        st.markdown(f'<div style="height:{alto_espaciador}px;"></div>', unsafe_allow_html=True)
+        # el título con logo (equipo o "NFL") — ahora siempre existe ese
+        # encabezado, así que el espaciador es el mismo en ambos casos.
+        st.markdown('<div style="height:96px;"></div>', unsafe_allow_html=True)
         st.markdown(_sin_sangria("""
         <p style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:1.2rem;
            color:#F1F4F9; margin:0 0 10px 0;">Injury News</p>
