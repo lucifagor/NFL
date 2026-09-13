@@ -812,7 +812,7 @@ if st.session_state.pagina == "inicio":
     principales = noticias[:10] if not (noticias and "error" in noticias[0]) else noticias
     pasadas = noticias[10:30] if not (noticias and "error" in noticias[0]) else []
 
-    col_margen_izq, col_lista, col_principal, col_margen_der = st.columns([0.15, 0.7, 1.8, 0.35], gap="small")
+    col_margen_izq, col_lista, col_principal, col_margen_der = st.columns([0.03, 0.7, 1.8, 0.47], gap="small")
 
     with col_lista:
         filas_html = ""
