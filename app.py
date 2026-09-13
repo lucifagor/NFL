@@ -84,8 +84,12 @@ def inyectar_estilos():
         background-position: center top;
         background-attachment: fixed;
         background-repeat: no-repeat;
+        overflow-x: hidden;
     }}
-    [data-testid="stAppViewContainer"] > .main {{ background: transparent; }}
+    [data-testid="stAppViewContainer"] > .main {{ background: transparent; overflow-x: hidden; }}
+    html, body {{ overflow-x: hidden; max-width: 100%; }}
+    [data-testid="stMainBlockContainer"], .block-container {{ max-width: 100%; overflow-x: hidden; }}
+    * {{ box-sizing: border-box; }}
     </style>
     """), unsafe_allow_html=True)
 
@@ -178,8 +182,9 @@ def inyectar_estilos():
         background: #D8DBD4; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.35);
         padding: 14px; text-align: center; margin-bottom: 14px;
         display: flex; flex-direction: column; height: 360px; overflow: hidden;
+        max-width: 100%; width: 100%;
     }
-    .noticia-card img { flex-shrink: 0; }
+    .noticia-card img { flex-shrink: 0; max-width: 100%; }
     .noticia-card p { color: #14241A; }
     .noticia-card a { color: #BD4E1E; font-weight: 700; text-decoration: underline; }
     .noticia-titulo {
