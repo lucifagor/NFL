@@ -1515,9 +1515,14 @@ if st.session_state.pagina == "fantasy":
                     filtro_pos = None if posicion_sel == "Todas" else posicion_sel
                     ranking = ranking_fantasy_cacheado(season_fantasy, filtro_pos, 50)
                     col_usada = ranking.attrs.get("columna_usada", "fantasy_points_ppr")
+                    temporada_usada = ranking.attrs.get("temporada_usada", season_fantasy)
+                    aviso_temporada = (
+                        f" (la {season_fantasy} todavía no tiene datos publicados, "
+                        f"mostrando {temporada_usada})" if temporada_usada != season_fantasy else ""
+                    )
                     st.caption(
                         f"Puntos calculados por nflverse ({'PPR' if 'ppr' in col_usada else 'estándar'}) "
-                        "para QB/RB/WR/TE — no incluye K/DST/IDP."
+                        f"para QB/RB/WR/TE — no incluye K/DST/IDP.{aviso_temporada}"
                     )
                     st.dataframe(ranking, use_container_width=True, hide_index=True)
                 except Exception as e:

@@ -1211,13 +1211,31 @@ def obtener_ranking_fantasy(season: int, posicion: str = None, top_n: int = 50) 
     QB/RB/WR/TE — nflverse no incluye puntos de fantasy para K/DST
     (usan otra lógica de puntuación) ni para posiciones defensivas
     individuales (eso es para ligas IDP, un formato distinto).
+
+    Si la temporada pedida todavía no tiene su archivo de datos
+    publicado en nflverse (típico apenas arranca la temporada — da
+    error 404), cae automáticamente a la temporada anterior y lo avisa
+    en el resultado (stats.attrs["temporada_usada"]).
     """
     if not NFL_DATA_PY_OK:
         raise RuntimeError("nfl_data_py no disponible")
 
-    datos = nfl.import_seasonal_data([season])
-    if datos is None or datos.empty:
-        raise ValueError(f"No hay estadísticas de jugadores disponibles para {season} todavía.")
+    temporada_usada = season
+    try:
+        datos = nfl.import_seasonal_data([season])
+        if datos is None or datos.empty:
+            raise ValueError("vacío")
+    except Exception:
+        temporada_usada = season - 1
+        try:
+            datos = nfl.import_seasonal_data([temporada_usada])
+        except Exception as e:
+            raise ValueError(
+                f"No hay estadísticas de jugadores disponibles ni para {season} ni para "
+                f"{temporada_usada} todavía: {e}"
+            )
+        if datos is None or datos.empty:
+            raise ValueError(f"No hay estadísticas de jugadores disponibles para {season} ni {temporada_usada} todavía.")
 
     columna_puntos = None
     for candidata in ["fantasy_points_ppr", "fantasy_points"]:
@@ -1227,7 +1245,7 @@ def obtener_ranking_fantasy(season: int, posicion: str = None, top_n: int = 50) 
     if columna_puntos is None:
         raise ValueError("Esta versión de nfl_data_py no trae puntos de fantasy precalculados.")
 
-    roster = nfl.import_seasonal_rosters([season])[["player_id", "player_name", "position", "team"]].drop_duplicates("player_id")
+    roster = nfl.import_seasonal_rosters([temporada_usada])[["player_id", "player_name", "position", "team"]].drop_duplicates("player_id")
     datos = datos.merge(roster, on="player_id", how="left")
 
     if posicion:
@@ -1242,6 +1260,7 @@ def obtener_ranking_fantasy(season: int, posicion: str = None, top_n: int = 50) 
         .reset_index(drop=True)
     )
     resultado.attrs["columna_usada"] = columna_puntos
+    resultado.attrs["temporada_usada"] = temporada_usada
     return resultado
 
 
