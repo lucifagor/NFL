@@ -427,12 +427,15 @@ def obtener_lesiones_espn(team_abbr: str) -> list:
         normalizadas = []
         for item in crudo:
             atleta = item.get("athlete", {}) or {}
+            detalle_txt = item.get("details", {}).get("detail", "") if isinstance(item.get("details"), dict) else ""
+            if "coach's decision" in detalle_txt.lower() or "coaches decision" in detalle_txt.lower():
+                continue
             normalizadas.append({
                 "jugador": atleta.get("displayName", item.get("displayName", "?")),
                 "posicion": atleta.get("position", {}).get("abbreviation", "?")
                     if isinstance(atleta.get("position"), dict) else "?",
                 "estado": item.get("status", item.get("type", {}).get("description", "?")),
-                "detalle": item.get("details", {}).get("detail", "") if isinstance(item.get("details"), dict) else "",
+                "detalle": detalle_txt,
             })
         return normalizadas
     except Exception as e:
@@ -648,12 +651,15 @@ def obtener_lesiones_liga(limite: int = 25) -> list:
                 estado = item.get("status") or (item.get("type") or {}).get("description", "?")
                 if str(estado).strip().lower() in _ESTADOS_IRRELEVANTES:
                     continue
+                detalle_txt = (item.get("details") or {}).get("detail", "") if isinstance(item.get("details"), dict) else ""
+                if "coach's decision" in detalle_txt.lower() or "coaches decision" in detalle_txt.lower():
+                    continue
                 filas.append({
                     "equipo": abbr,
                     "jugador": atleta.get("displayName", "?"),
                     "posicion": posicion.get("abbreviation", "?") if isinstance(posicion, dict) else "?",
                     "estado": estado,
-                    "detalle": (item.get("details") or {}).get("detail", "") if isinstance(item.get("details"), dict) else "",
+                    "detalle": detalle_txt,
                     "fecha": item.get("date", ""),
                 })
             return filas
@@ -701,6 +707,10 @@ def obtener_marcadores_actuales() -> list:
                 "estado": estado,
                 "fecha": ev.get("date", ""),
             })
+        # Primero los que faltan por jugar, y hasta el final los que ya
+        # terminaron (ESPN ya entrega los eventos en orden cronológico
+        # dentro de la jornada, así que solo hace falta reagrupar).
+        partidos.sort(key=lambda p: 1 if "final" in p["estado"].lower() else 0)
         return partidos
     except Exception as e:
         return [{"error": str(e)}]
@@ -860,7 +870,14 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
             break
 
     de_esta_semana = [j for j in juegos if (j.get("game") or {}).get("week") == semana_actual]
-    de_esta_semana.sort(key=_fecha)
+
+    def _terminado(j):
+        estado = ((j.get("game") or {}).get("status") or {}).get("short", "NS")
+        return 1 if estado in ("FT", "AOT") else 0
+
+    # Primero los que faltan por jugar (en orden cronológico), y hasta el
+    # final los que ya terminaron.
+    de_esta_semana.sort(key=lambda j: (_terminado(j), _fecha(j)))
 
     resultado = []
     for j in de_esta_semana:
@@ -889,10 +906,17 @@ def _lesiones_equipo_api_sports_raw(api_key: str, team_id, abbr: str) -> list:
     otros equipos ni recortar por fecha) — se usa tanto para el listado
     de toda la liga como para el filtro por equipo específico, así
     ambos usan la misma fuente confiable sin que un equipo con lesiones
-    'menos recientes' que las de otros quede fuera al truncar."""
+    'menos recientes' que las de otros quede fuera al truncar.
+
+    Filtra las entradas que son 'Coach's Decision' (jugador sano, fuera
+    por decisión técnica/estrategia) — no es una lesión ni una
+    suspensión, así que no debe aparecer en el reporte de lesiones."""
     data = _api_sports_get(api_key, "/injuries", {"team": team_id})
     filas = []
     for lesion in data.get("response", []):
+        descripcion = lesion.get("description", "") or ""
+        if "coach's decision" in descripcion.lower() or "coaches decision" in descripcion.lower():
+            continue
         jugador = lesion.get("player") or {}
         filas.append({
             "equipo": abbr,
@@ -900,7 +924,7 @@ def _lesiones_equipo_api_sports_raw(api_key: str, team_id, abbr: str) -> list:
             "posicion": jugador.get("position", "") or jugador.get("pos", "") or "",
             "foto": jugador.get("photo", "") or jugador.get("image", "") or "",
             "estado": lesion.get("status", "?"),
-            "detalle": lesion.get("description", "") or "",
+            "detalle": descripcion,
             "fecha": lesion.get("date", "") or "",
         })
     return filas
@@ -1145,7 +1169,7 @@ def obtener_roster_equipo(team_abbr: str, season: int) -> pd.DataFrame:
 
 POSICIONES_CON_FANTASY = ["QB", "RB", "WR", "TE"]
 POSICIONES_SIN_FANTASY = ["DL", "LB", "DB"]  # IDP — la mayoría de ligas no las usa, sin fuente conectada
-POSICIONES_ESPN = {"K": 5, "DST": 16}  # ID de posición interno de ESPN
+POSICIONES_ESPN = {"QB": 1, "RB": 2, "WR": 3, "TE": 4, "K": 5, "DST": 16}  # ID de posición interno de ESPN
 
 _EQUIPOS_ESPN_ID = {
     1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN", 8: "DET",

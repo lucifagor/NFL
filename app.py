@@ -500,7 +500,7 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
     tiene_extra = "PF" in filas.columns
 
     columnas_extra = " 48px 48px 48px 48px 74px" if tiene_extra else ""
-    grid_cols = f"42px 1fr 46px 46px 46px 72px{columnas_extra}"
+    grid_cols = f"42px 175px 46px 46px 46px 72px{columnas_extra}"
 
     def _celda(contenido, extra_estilo=""):
         return f'<div style="text-align:center; color:{NEGRO}; {extra_estilo}">{contenido}</div>'
@@ -537,7 +537,7 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
         </div>"""
 
     return _sin_sangria(f"""
-    <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; min-width:420px; background:{BLANCO};">
+    <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; width:fit-content; background:{BLANCO};">
         <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center;
              background:{BLANCO}; padding:8px 0;">
             <div style="grid-column:1 / span 2; padding:0 10px; color:{NEGRO}; font-weight:700; white-space:nowrap;
@@ -592,7 +592,7 @@ def tabla_conferencia_agregada_html(nombre_conferencia: str, filas_division: pd.
     tiene_extra = "PF" in filas_division.columns
 
     columnas_extra = " 56px 56px" if tiene_extra else ""
-    grid_cols = f"42px 1fr 46px 46px 46px 72px{columnas_extra}"
+    grid_cols = f"42px 175px 46px 46px 46px 72px{columnas_extra}"
 
     def _celda(contenido, extra_estilo=""):
         return f'<div style="text-align:center; color:{NEGRO}; {extra_estilo}">{contenido}</div>'
@@ -631,7 +631,7 @@ def tabla_conferencia_agregada_html(nombre_conferencia: str, filas_division: pd.
         )
 
     return _sin_sangria(f"""
-    <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; min-width:420px; background:{BLANCO};">
+    <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; width:fit-content; background:{BLANCO};">
         <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center; background:{BLANCO}; padding:8px 0;">
             <div style="grid-column:1 / span 2; padding:0 10px; white-space:nowrap;">
                 <span style="background:{color_nombre}; color:#FFFFFF; font-weight:700; padding:4px 12px;
@@ -1474,17 +1474,14 @@ if st.session_state.pagina == "detalle":
 # ============================================================
 if st.session_state.pagina == "fantasy":
     encabezado_sitio("fantasy")
-    hero(
-        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Fantasy</span>',
-        "Jugadores destacados de la temporada — por equipo y por posición.",
-    )
+    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Fantasy</span>')
 
     season_fantasy = datetime.date.today().year
 
-    tab_ranking, tab_equipo, tab_posicion = st.tabs(["🏆 Ranking de puntos", "🏟️ Por equipo", "⭐ Por posición"])
+    tab_ranking, tab_equipo, tab_posicion = st.tabs(["Ranking de puntos", "Por equipo", "Por posición"])
 
     with tab_ranking:
-        posiciones_todas = POSICIONES_CON_FANTASY + list(POSICIONES_ESPN.keys()) + POSICIONES_SIN_FANTASY
+        posiciones_todas = list(POSICIONES_ESPN.keys()) + POSICIONES_SIN_FANTASY
         col_pos, col_aire = st.columns([2, 3])
         with col_pos:
             posicion_sel = st.selectbox(
@@ -1498,35 +1495,22 @@ if st.session_state.pagina == "fantasy":
                 "la mayoría de las ligas no usa, y ni siquiera el catálogo default de ESPN la trae. "
                 "En vez de inventar un número, lo dejamos vacío hasta conectar una fuente real."
             )
-        elif posicion_sel in POSICIONES_ESPN:
+        else:
             with st.spinner("Cargando ranking de fantasy (ESPN)..."):
                 try:
-                    ranking = ranking_fantasy_espn_cacheado(season_fantasy, posicion_sel, 50)
+                    if posicion_sel == "Todas":
+                        partes = [ranking_fantasy_espn_cacheado(season_fantasy, p, 50) for p in POSICIONES_ESPN]
+                        ranking = pd.concat(partes, ignore_index=True).sort_values("Puntos", ascending=False).head(50).reset_index(drop=True)
+                    else:
+                        ranking = ranking_fantasy_espn_cacheado(season_fantasy, posicion_sel, 50)
                     st.caption(
-                        f"Puntos de {posicion_sel} vía el endpoint de fantasy de ESPN — "
-                        "no confirmado en vivo, si algo sale raro avísame."
+                        "Puntos en vivo vía el endpoint de fantasy de ESPN (se actualiza durante la "
+                        "semana, no depende de que termine la temporada) — no confirmado en vivo desde "
+                        "este entorno de desarrollo, si algo sale raro avísame con el mensaje exacto."
                     )
                     st.dataframe(ranking, use_container_width=True, hide_index=True)
                 except Exception as e:
                     st.info(f"No se pudo cargar el ranking de {posicion_sel} desde ESPN: {e}")
-        else:
-            with st.spinner("Cargando ranking de fantasy..."):
-                try:
-                    filtro_pos = None if posicion_sel == "Todas" else posicion_sel
-                    ranking = ranking_fantasy_cacheado(season_fantasy, filtro_pos, 50)
-                    col_usada = ranking.attrs.get("columna_usada", "fantasy_points_ppr")
-                    temporada_usada = ranking.attrs.get("temporada_usada", season_fantasy)
-                    aviso_temporada = (
-                        f" (la {season_fantasy} todavía no tiene datos publicados, "
-                        f"mostrando {temporada_usada})" if temporada_usada != season_fantasy else ""
-                    )
-                    st.caption(
-                        f"Puntos calculados por nflverse ({'PPR' if 'ppr' in col_usada else 'estándar'}) "
-                        f"para QB/RB/WR/TE — no incluye K/DST/IDP.{aviso_temporada}"
-                    )
-                    st.dataframe(ranking, use_container_width=True, hide_index=True)
-                except Exception as e:
-                    st.info(f"No se pudo cargar el ranking de fantasy: {e}")
 
     with tab_equipo:
         st.caption(
