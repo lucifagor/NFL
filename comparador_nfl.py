@@ -226,9 +226,22 @@ def obtener_jugadores_clave(season_actual: int, temporadas_historicas: int = 0) 
         if temporadas_historicas > 0 else [season_actual]
     )
 
-    datos = nfl.import_seasonal_data(temporadas)
-    if datos is None or datos.empty:
-        raise ValueError(f"No hay estadísticas de jugadores disponibles para {temporadas}.")
+    # Si la temporada actual todavía no tiene su archivo de estadísticas
+    # publicado en nflverse (típico apenas arranca la temporada — falla
+    # con error 404 o similar), recorre todo el rango un año atrás y
+    # reintenta, en vez de tronar de plano.
+    try:
+        datos = nfl.import_seasonal_data(temporadas)
+        if datos is None or datos.empty:
+            raise ValueError("vacío")
+    except Exception:
+        temporadas = [t - 1 for t in temporadas]
+        try:
+            datos = nfl.import_seasonal_data(temporadas)
+        except Exception as e:
+            raise ValueError(f"No hay estadísticas de jugadores disponibles para {temporadas}: {e}")
+        if datos is None or datos.empty:
+            raise ValueError(f"No hay estadísticas de jugadores disponibles para {temporadas}.")
 
     try:
         roster = nfl.import_seasonal_rosters(temporadas)[["player_id", "player_name", "position", "team"]]
@@ -320,6 +333,7 @@ def obtener_jugadores_clave(season_actual: int, temporadas_historicas: int = 0) 
     jugadores["wr1_desempeno_score"] = jugadores["wr1_yardas_recepcion_pg"] + jugadores["wr1_td_recepcion_pg"] * 20
     jugadores["te1_desempeno_score"] = jugadores["te1_yardas_recepcion_pg"] + jugadores["te1_td_recepcion_pg"] * 20
 
+    jugadores.attrs["temporada_usada"] = temporadas[-1]
     return jugadores
 
 
