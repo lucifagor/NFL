@@ -33,6 +33,7 @@ import math
 import re
 import pandas as pd
 import requests
+import json
 import feedparser
 
 try:
@@ -1140,6 +1141,108 @@ def obtener_roster_equipo(team_abbr: str, season: int) -> pd.DataFrame:
     if "Posición" in resultado.columns:
         resultado = resultado.sort_values("Posición")
     return resultado.reset_index(drop=True)
+
+
+POSICIONES_CON_FANTASY = ["QB", "RB", "WR", "TE"]
+POSICIONES_SIN_FANTASY = ["DL", "LB", "DB"]  # IDP — la mayoría de ligas no las usa, sin fuente conectada
+POSICIONES_ESPN = {"K": 5, "DST": 16}  # ID de posición interno de ESPN
+
+_EQUIPOS_ESPN_ID = {
+    1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN", 8: "DET",
+    9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV", 14: "LA", 15: "MIA", 16: "MIN",
+    17: "NE", 18: "NO", 19: "NYG", 20: "NYJ", 21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC",
+    25: "SF", 26: "SEA", 27: "TB", 28: "WAS", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU",
+}
+
+
+def obtener_ranking_fantasy_espn(season: int, posicion_espn: str, top_n: int = 50) -> pd.DataFrame:
+    """
+    Ranking de K o DST por puntos de fantasy, vía el endpoint no oficial
+    de ESPN Fantasy Football (el mismo que usa su app — 'kona_player_info').
+    Es la única fuente que tenemos con puntos reales para estas dos
+    posiciones, ya que nflverse no las incluye. No confirmado en vivo
+    (sin acceso a internet en este entorno de desarrollo) — el formato
+    exacto de la respuesta viene de documentación de la comunidad, no
+    de documentación oficial de ESPN.
+    """
+    position_id = POSICIONES_ESPN.get(posicion_espn)
+    if position_id is None:
+        raise ValueError(f"Posición no soportada por este endpoint: {posicion_espn}")
+
+    url = f"https://fantasy.espn.com/apis/v3/games/ffl/seasons/{season}/segments/0/leaguedefaults/3"
+    filtro = {
+        "players": {
+            "filterSlotIds": {"value": [position_id]},
+            "sortAppliedStatTotal": {"sortAsc": False, "sortPriority": 1, "value": f"{season}"},
+            "limit": top_n,
+        }
+    }
+    headers = {"x-fantasy-filter": json.dumps(filtro)}
+    r = requests.get(url, headers=headers, params={"view": "kona_player_info"}, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+
+    filas = []
+    for item in data.get("players", []):
+        jugador = item.get("player") or {}
+        equipo_id = jugador.get("proTeamId")
+        puntos = None
+        for stat in jugador.get("stats", []) or []:
+            if stat.get("seasonId") == season and stat.get("statSourceId") == 0:
+                puntos = stat.get("appliedTotal")
+                break
+        filas.append({
+            "Jugador": jugador.get("fullName", "?"),
+            "Equipo": _EQUIPOS_ESPN_ID.get(equipo_id, "?"),
+            "Posición": posicion_espn,
+            "Puntos": puntos if puntos is not None else 0.0,
+        })
+
+    resultado = pd.DataFrame(filas).sort_values("Puntos", ascending=False).reset_index(drop=True)
+    return resultado.head(top_n)
+
+
+
+def obtener_ranking_fantasy(season: int, posicion: str = None, top_n: int = 50) -> pd.DataFrame:
+    """
+    Ranking de jugadores por puntos de fantasy de la temporada, usando
+    la columna de puntos ya calculada por nflverse (fantasy_points_ppr
+    si está disponible, si no fantasy_points normal). Solo cubre
+    QB/RB/WR/TE — nflverse no incluye puntos de fantasy para K/DST
+    (usan otra lógica de puntuación) ni para posiciones defensivas
+    individuales (eso es para ligas IDP, un formato distinto).
+    """
+    if not NFL_DATA_PY_OK:
+        raise RuntimeError("nfl_data_py no disponible")
+
+    datos = nfl.import_seasonal_data([season])
+    if datos is None or datos.empty:
+        raise ValueError(f"No hay estadísticas de jugadores disponibles para {season} todavía.")
+
+    columna_puntos = None
+    for candidata in ["fantasy_points_ppr", "fantasy_points"]:
+        if candidata in datos.columns:
+            columna_puntos = candidata
+            break
+    if columna_puntos is None:
+        raise ValueError("Esta versión de nfl_data_py no trae puntos de fantasy precalculados.")
+
+    roster = nfl.import_seasonal_rosters([season])[["player_id", "player_name", "position", "team"]].drop_duplicates("player_id")
+    datos = datos.merge(roster, on="player_id", how="left")
+
+    if posicion:
+        datos = datos[datos["position"] == posicion]
+
+    resultado = (
+        datos[["player_name", "team", "position", columna_puntos]]
+        .dropna(subset=[columna_puntos])
+        .sort_values(columna_puntos, ascending=False)
+        .head(top_n)
+        .rename(columns={"player_name": "Jugador", "team": "Equipo", "position": "Posición", columna_puntos: "Puntos"})
+        .reset_index(drop=True)
+    )
+    resultado.attrs["columna_usada"] = columna_puntos
+    return resultado
 
 
 def obtener_lideres_estadisticos(season: int, top_n: int = 5) -> dict:

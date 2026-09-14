@@ -30,6 +30,11 @@ from comparador_nfl import (
     obtener_stats_combinadas,
     obtener_jugadores_clave,
     obtener_lideres_estadisticos,
+    obtener_ranking_fantasy,
+    obtener_ranking_fantasy_espn,
+    POSICIONES_CON_FANTASY,
+    POSICIONES_SIN_FANTASY,
+    POSICIONES_ESPN,
     combinar_stats_con_jugadores,
     obtener_calendario_semana,
     obtener_proximos_partidos,
@@ -237,23 +242,6 @@ def franja_campo():
 
 _MESES_ES = {1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
              7: "jul", 8: "ago", 9: "sep", 10: "oct", 11: "nov", 12: "dic"}
-
-
-def _estimar_regreso(detalle: str) -> str:
-    """Busca una mención de semana de regreso dentro del texto del
-    comentario de la lesión (ej. 'Expected Return - Week 2'). No
-    tenemos una fecha estructurada de regreso en ninguna fuente
-    conectada, así que esto es una búsqueda de texto de mejor esfuerzo:
-    solo cuenta si la palabra 'return' aparece cerca de 'Week N' (para
-    no confundirla con la semana en que se lesionó) — si no encuentra
-    ese patrón, dice honestamente 'Unavailable' en vez de inventar una
-    fecha."""
-    if not detalle:
-        return "Unavailable"
-    m = re.search(r"return[^.]{0,30}?week\s*(\d+)", detalle, re.IGNORECASE)
-    if m:
-        return f"Week {m.group(1)}"
-    return "Unavailable"
 
 
 def _temporada_nfl_actual() -> int:
@@ -730,6 +718,16 @@ def lideres_estadisticos_cacheados(season: int, top_n: int = 10):
     return obtener_lideres_estadisticos(season, top_n)
 
 
+@st.cache_data(show_spinner=False, ttl=1800)
+def ranking_fantasy_cacheado(season: int, posicion: str = None, top_n: int = 50):
+    return obtener_ranking_fantasy(season, posicion, top_n)
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def ranking_fantasy_espn_cacheado(season: int, posicion_espn: str, top_n: int = 50):
+    return obtener_ranking_fantasy_espn(season, posicion_espn, top_n)
+
+
 def fila_equipos_alfabetica():
     """Fila horizontal con los 32 logos de equipo, en orden alfabético,
     cuadrados y alineados — cada logo es un hipervínculo real
@@ -1188,9 +1186,9 @@ if st.session_state.pagina == "lesiones":
 
                 if l is None:
                     filas_html += f"""
-                    <div style="display:grid; grid-template-columns:{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 1.6fr 60px;
+                    <div style="display:grid; grid-template-columns:{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 2fr;
                          gap:10px; align-items:center; background:{fondo}; padding:10px 8px; min-height:20px;">
-                        <div></div><div></div><div></div><div></div><div></div><div></div>
+                        <div></div><div></div><div></div><div></div><div></div>
                     </div>"""
                     continue
 
@@ -1219,13 +1217,10 @@ if st.session_state.pagina == "lesiones":
                         else '<div></div>'
                     )
 
-                regreso_txt = _estimar_regreso(l.get("detalle", ""))
-                celda_regreso = f'<div style="text-align:center; font-size:0.8rem; color:#5A5A5A;">{regreso_txt}</div>'
-
                 posicion_txt = l.get("posicion", "") or posiciones_respaldo.get(l.get("jugador", ""), "") or "—"
 
                 filas_html += f"""
-                <div style="display:grid; grid-template-columns:{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 1.6fr 60px;
+                <div style="display:grid; grid-template-columns:{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 2fr;
                      gap:10px; align-items:center; background:{fondo}; padding:10px 8px;">
                     {celda_foto}
                     {celda_equipo}
@@ -1233,10 +1228,9 @@ if st.session_state.pagina == "lesiones":
                     <div style="color:#5A5A5A; font-size:0.85rem;">{posicion_txt}</div>
                     <div style="font-size:0.85rem; color:#14241A;"><span style="color:{color_punto};">●</span> {estado}</div>
                     <div style="color:#5A5A5A; font-size:0.82rem;">{l.get('detalle', '')}</div>
-                    {celda_regreso}
                 </div>"""
 
-            encabezado_cols = f"{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 1.6fr 60px"
+            encabezado_cols = f"{col_foto}{'40px ' if muestra_equipo else ''}1fr 55px 120px 2fr"
             encabezado_celda_foto = '<div></div>' if muestra_equipo else ''
             encabezado_celda_equipo = '<div></div>' if muestra_equipo else ''
             st.markdown(_sin_sangria(f"""
@@ -1245,7 +1239,7 @@ if st.session_state.pagina == "lesiones":
                      border-bottom:2px solid #E4E6E1; font-size:0.75rem; font-weight:700; color:#7A7A7A; text-transform:uppercase;">
                     {encabezado_celda_foto}
                     {encabezado_celda_equipo}
-                    <div>Name</div><div>Pos</div><div>Status</div><div>Comment</div><div>Return</div>
+                    <div>Name</div><div>Pos</div><div>Status</div><div>Comment</div>
                 </div>
                 {filas_html}
             </div>
@@ -1487,7 +1481,47 @@ if st.session_state.pagina == "fantasy":
 
     season_fantasy = datetime.date.today().year
 
-    tab_equipo, tab_posicion = st.tabs(["🏟️ Por equipo", "⭐ Por posición"])
+    tab_ranking, tab_equipo, tab_posicion = st.tabs(["🏆 Ranking de puntos", "🏟️ Por equipo", "⭐ Por posición"])
+
+    with tab_ranking:
+        posiciones_todas = POSICIONES_CON_FANTASY + list(POSICIONES_ESPN.keys()) + POSICIONES_SIN_FANTASY
+        col_pos, col_aire = st.columns([2, 3])
+        with col_pos:
+            posicion_sel = st.selectbox(
+                "Posición", ["Todas"] + posiciones_todas, key="posicion_ranking_fantasy",
+            )
+
+        if posicion_sel in POSICIONES_SIN_FANTASY:
+            st.info(
+                f"Todavía no tenemos una fuente de puntos de fantasy para {posicion_sel} — "
+                "es una posición de liga IDP (jugador defensivo individual), un formato que "
+                "la mayoría de las ligas no usa, y ni siquiera el catálogo default de ESPN la trae. "
+                "En vez de inventar un número, lo dejamos vacío hasta conectar una fuente real."
+            )
+        elif posicion_sel in POSICIONES_ESPN:
+            with st.spinner("Cargando ranking de fantasy (ESPN)..."):
+                try:
+                    ranking = ranking_fantasy_espn_cacheado(season_fantasy, posicion_sel, 50)
+                    st.caption(
+                        f"Puntos de {posicion_sel} vía el endpoint de fantasy de ESPN — "
+                        "no confirmado en vivo, si algo sale raro avísame."
+                    )
+                    st.dataframe(ranking, use_container_width=True, hide_index=True)
+                except Exception as e:
+                    st.info(f"No se pudo cargar el ranking de {posicion_sel} desde ESPN: {e}")
+        else:
+            with st.spinner("Cargando ranking de fantasy..."):
+                try:
+                    filtro_pos = None if posicion_sel == "Todas" else posicion_sel
+                    ranking = ranking_fantasy_cacheado(season_fantasy, filtro_pos, 50)
+                    col_usada = ranking.attrs.get("columna_usada", "fantasy_points_ppr")
+                    st.caption(
+                        f"Puntos calculados por nflverse ({'PPR' if 'ppr' in col_usada else 'estándar'}) "
+                        "para QB/RB/WR/TE — no incluye K/DST/IDP."
+                    )
+                    st.dataframe(ranking, use_container_width=True, hide_index=True)
+                except Exception as e:
+                    st.info(f"No se pudo cargar el ranking de fantasy: {e}")
 
     with tab_equipo:
         st.caption(
