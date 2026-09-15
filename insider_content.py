@@ -305,6 +305,47 @@ def render_grid_teasers(articulos: list):
                 st.markdown(render_tarjeta_teaser(art), unsafe_allow_html=True)
 
 
+_FRASE_RE = re.compile(r"^(.*?[.!?])(\s|$)")
+
+
+def _primera_frase(texto: str) -> str:
+    """Primera oración de un bloque de texto — para la lista compacta de
+    'Notas anteriores', que solo muestra título, primera frase y fecha."""
+    texto = (texto or "").strip()
+    if not texto:
+        return ""
+    m = _FRASE_RE.match(texto)
+    return (m.group(1).strip() if m else texto[:160].strip())
+
+
+def render_lista_archivo(articulos: list):
+    """Lista compacta (no tarjetas) para las notas que ya salieron de la
+    grilla principal de Insider por antigüedad: solo título (enlazado a
+    la nota completa), primera frase del cuerpo y fecha — pensada para la
+    pantalla que se abre con el botón 'Notas anteriores'."""
+    if not articulos:
+        st.info("Todavía no hay notas anteriores.")
+        return
+    for art in articulos:
+        articulo_id = urllib.parse.quote(str(art.get("id", "")), safe="")
+        intro, _ = _dividir_intro_resto(art.get("contenido", ""))
+        frase = _primera_frase(intro) or _primera_frase(art.get("resumen", ""))
+        fecha = art.get("fecha", "")
+        st.markdown(
+            _sin_sangria(f"""
+            <a href="?articulo={articulo_id}" target="_self" style="text-decoration:none;">
+            <div style="padding:12px 4px; border-bottom:1px solid rgba(241,244,249,0.14);">
+                <p style="color:#F1F4F9; font-weight:700; font-size:0.95rem; margin:0 0 3px 0;">{art.get('titulo', '')}</p>
+                <p style="color:#9CB3A3; font-size:0.82rem; margin:0;">
+                    {frase}{f' <span style="color:#5C6B62;">· {fecha}</span>' if fecha else ''}
+                </p>
+            </div>
+            </a>
+            """),
+            unsafe_allow_html=True,
+        )
+
+
 _ENCABEZADO_RE = re.compile(r"^#{2,4}\s+.+$", re.MULTILINE)
 
 

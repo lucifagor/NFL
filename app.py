@@ -72,7 +72,13 @@ from insider_content import (
     CATEGORIAS_LABEL,
     render_grid_teasers,
     render_articulo_completo,
+    render_lista_archivo,
 )
+
+# Insider siempre muestra como máximo esta cantidad de notas en la grilla
+# principal (5 filas de 2 columnas); el resto queda accesible desde el
+# botón "Notas anteriores" al final de la página.
+INSIDER_NOTAS_RECIENTES = 10
 
 try:
     API_SPORTS_KEY = st.secrets.get("API_SPORTS_KEY", "")
@@ -1658,7 +1664,50 @@ if st.session_state.pagina == "blog":
                 categoria_filtro = next(c for c in categorias_presentes if CATEGORIAS_LABEL.get(c, c) == filtro)
                 articulos = [a for a in articulos if a.get("categoria") == categoria_filtro]
 
-        render_grid_teasers(articulos)
+        # La grilla principal siempre muestra como máximo las 10 notas más
+        # recientes (5 filas de 2) — el resto se archiva y se accede con el
+        # botón de abajo, para que Insider no crezca sin límite en pantalla.
+        recientes = articulos[:INSIDER_NOTAS_RECIENTES]
+        anteriores = articulos[INSIDER_NOTAS_RECIENTES:]
+
+        render_grid_teasers(recientes)
+
+        if anteriores:
+            st.markdown("<div style='margin-top:6px;'></div>", unsafe_allow_html=True)
+            if st.button(f"📜 Notas anteriores ({len(anteriores)})", use_container_width=True):
+                st.session_state.insider_archivo_ids = [a["id"] for a in anteriores]
+                st.session_state.pagina = "blog_archivo"
+                st.rerun()
+
+    st.stop()
+
+
+# ============================================================
+# PANTALLA: INSIDER — NOTAS ANTERIORES (archivo de notas que ya salieron
+# de la grilla principal por antigüedad; solo título, primera frase y
+# fecha, sin foto ni tarjeta — se accede desde el botón al fondo de
+# Insider).
+# ============================================================
+if st.session_state.pagina == "blog_archivo":
+    encabezado_sitio("blog")
+
+    if st.button("← Volver a Insider"):
+        st.session_state.pagina = "blog"
+        st.rerun()
+
+    hero(
+        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Insider</span>',
+        "Notas anteriores",
+    )
+
+    with st.spinner("Cargando notas anteriores..."):
+        todos = cargar_columnas_manuales()
+
+    ids_archivo = st.session_state.get("insider_archivo_ids", [])
+    por_id = {a["id"]: a for a in todos}
+    anteriores = [por_id[i] for i in ids_archivo if i in por_id]
+
+    render_lista_archivo(anteriores)
 
     st.stop()
 
