@@ -205,53 +205,88 @@ def _linea_meta(art: dict) -> str:
 # ---------------------------------------------------------------------------
 # 3. Render — teaser (tarjeta) y artículo completo
 # ---------------------------------------------------------------------------
+def _vista_previa_cuerpo(art: dict) -> str:
+    """Arma el texto de vista previa que se muestra en la tarjeta teaser:
+    si el cuerpo del artículo ya trae un subtítulo (## Así), usa ESE
+    subtítulo en negrita más el párrafo que le sigue — el mismo fragmento
+    que se ve al entrar al artículo completo — para que la tarjeta
+    "adelante" contenido real en vez de un resumen aparte. Si el cuerpo no
+    tiene subtítulos, cae de nuevo al campo `resumen` del encabezado."""
+    intro, resto = _dividir_intro_resto(art.get("contenido", ""))
+    if resto:
+        primera_linea, _, resto_cuerpo = resto.partition("\n")
+        encabezado = primera_linea.lstrip("#").strip()
+        primer_parrafo = resto_cuerpo.strip().split("\n\n", 1)[0].strip()
+        if encabezado:
+            return (
+                f"<strong>{encabezado}</strong><br>{primer_parrafo}"
+                if primer_parrafo else f"<strong>{encabezado}</strong>"
+            )
+    if intro:
+        return intro.split("\n\n", 1)[0].strip()
+    return art.get("resumen", "")
+
+
 def render_tarjeta_teaser(art: dict) -> str:
-    """HTML de una tarjeta tipo teaser — mismo lenguaje visual que las
-    tarjetas de la pestaña News (clase .noticia-card): foto con la
-    categoría sobrepuesta, título, deck, resumen y línea de autor/fecha.
-    Toda la tarjeta es un hipervínculo real (?articulo=ID), igual que ya
-    se usa para navegar a equipos y partidos en el resto del sitio."""
+    """HTML de una tarjeta tipo teaser: foto chica a la izquierda (con la
+    categoría sobrepuesta, se ve completa gracias al mismo recorte que usa
+    News) y a la derecha, alineado a la izquierda, el título en naranja, el
+    deck en cursiva, un adelanto del cuerpo del artículo y la línea de
+    autor/fecha. Toda la tarjeta es un hipervínculo real (?articulo=ID),
+    igual que ya se usa para navegar a equipos y partidos en el resto del
+    sitio."""
     color_cat = CATEGORIAS_COLOR.get(art.get("categoria"), "#BD4E1E")
     etiqueta_cat = CATEGORIAS_LABEL.get(art.get("categoria"), "Insider")
     articulo_id = urllib.parse.quote(str(art.get("id", "")), safe="")
 
-    if art.get("imagen"):
-        sello_auto = (
-            '<span style="position:absolute; bottom:6px; right:8px; background:rgba(0,0,0,0.6); '
-            'color:#FFFFFF; font-size:0.65rem; padding:2px 7px; border-radius:4px;">⚙️ auto</span>'
-            if art.get("auto") else ""
-        )
-        imagen_html = f"""
-        <div style="position:relative; flex-shrink:0;">
-            <img src="{art['imagen']}" style="width:100%; height:180px;
-                 object-fit:cover; object-position:center top; border-radius:6px; display:block;">
-            <span style="position:absolute; top:6px; left:8px; background:{color_cat};
-                 color:#FFFFFF; font-weight:700; font-size:0.68rem; padding:2px 8px; border-radius:4px;">{etiqueta_cat}</span>
-            {sello_auto}
-        </div>"""
-    else:
-        sello_auto = " · ⚙️ auto" if art.get("auto") else ""
-        imagen_html = f"""
-        <div style="margin-bottom:6px;">
-            <span style="background:{color_cat}; color:#FFFFFF; font-weight:700;
-                 font-size:0.68rem; padding:2px 8px; border-radius:4px;">{etiqueta_cat}</span>
-            <span style="color:#8B9187; font-size:0.68rem;">{sello_auto}</span>
-        </div>"""
-
     deck_html = (
-        f'<p style="color:#5A5A5A; font-size:0.8rem; font-style:italic; margin:8px 0 4px 0;">{art["deck"]}</p>'
+        f'<p style="color:#5A5A5A; font-size:0.8rem; font-style:italic; margin:0 0 6px 0;">{art["deck"]}</p>'
         if art.get("deck") else ""
     )
     meta_txt = _linea_meta(art)
+    meta_html = (
+        f'<p style="color:#8B9187; font-size:0.7rem; margin:8px 0 0 0;">{meta_txt}</p>'
+        if meta_txt else ""
+    )
+    vista_previa = _vista_previa_cuerpo(art)
+
+    if art.get("imagen"):
+        return _sin_sangria(f"""
+        <a href="?articulo={articulo_id}" target="_self" style="text-decoration:none;">
+        <div style="background:#D8DBD4; border-radius:8px; box-shadow:0 4px 10px rgba(0,0,0,0.35);
+             padding:12px; margin-bottom:14px; display:flex; gap:12px; align-items:flex-start;
+             height:196px; overflow:hidden; max-width:96%; width:96%; margin-left:auto; margin-right:auto;">
+            <div style="position:relative; flex-shrink:0; width:110px; height:172px;">
+                <img src="{art['imagen']}" style="width:110px; height:172px; object-fit:cover;
+                     object-position:center top; border-radius:6px; display:block;">
+                <span style="position:absolute; top:6px; left:6px; background:{color_cat};
+                     color:#FFFFFF; font-weight:700; font-size:0.6rem; padding:2px 6px; border-radius:4px;">{etiqueta_cat}</span>
+            </div>
+            <div style="flex:1; min-width:0; text-align:left; overflow:hidden; height:172px;">
+                <p style="color:#BD4E1E; font-weight:800; font-size:1rem; margin:0 0 4px 0;
+                     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{art.get('titulo', '')}</p>
+                {deck_html}
+                <p style="color:#14241A; font-size:0.82rem; margin:0;
+                     display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">{vista_previa}</p>
+                {meta_html}
+            </div>
+        </div>
+        </a>
+        """)
 
     return _sin_sangria(f"""
     <a href="?articulo={articulo_id}" target="_self" style="text-decoration:none;">
-    <div class="noticia-card">
-        {imagen_html}
-        <p class="noticia-titulo" style="color:#BD4E1E !important;">{art.get('titulo', '')}</p>
+    <div style="background:#D8DBD4; border-radius:8px; box-shadow:0 4px 10px rgba(0,0,0,0.35);
+         padding:14px; margin-bottom:14px; text-align:left; max-width:96%; width:96%;
+         margin-left:auto; margin-right:auto; min-height:150px;">
+        <span style="background:{color_cat}; color:#FFFFFF; font-weight:700;
+             font-size:0.68rem; padding:2px 8px; border-radius:4px;">{etiqueta_cat}</span>
+        <p style="color:#BD4E1E; font-weight:800; font-size:1rem; margin:8px 0 4px 0;
+             display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{art.get('titulo', '')}</p>
         {deck_html}
-        <p class="noticia-desc">{art.get('resumen', '')}</p>
-        {f'<p style="color:#8B9187; font-size:0.72rem; margin-top:auto;">{meta_txt}</p>' if meta_txt else ''}
+        <p style="color:#14241A; font-size:0.82rem; margin:0;
+             display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">{vista_previa}</p>
+        {meta_html}
     </div>
     </a>
     """)
@@ -328,19 +363,23 @@ def render_articulo_completo(art: dict):
     meta_txt = _linea_meta(art)
     contenido = art.get("contenido", "")
 
-    # El cuadro claro reusa el mismo fondo que noticia-card/stMetric, pero
-    # como aquí el contenido es Markdown normal (no la clase .noticia-card),
-    # forzamos texto oscuro dentro de ESTE cuadro en particular — si no, se
-    # queda con el color claro del tema oscuro y no se distingue sobre el
-    # fondo gris. Los subtítulos del cuerpo (## Así) van en el naranja que
-    # ya se usa en el resto del sitio, para que resalten como en el ejemplo.
+    # El cuadro tiene que quedar con fondo BLANCO explícito y letra negra —
+    # no basta con heredar el gris que usan otros cuadros del sitio (la
+    # regla genérica por data-testid a veces no alcanza a pintar este
+    # contenedor en particular), así que forzamos el fondo directamente
+    # sobre la clase del propio contenedor (.st-key-<key>), no solo sobre
+    # el texto de adentro. Los subtítulos del cuerpo (## Así) van en el
+    # naranja que ya se usa en el resto del sitio, para que resalten.
     st.markdown(
         _sin_sangria("""
         <style>
+        .st-key-caja_articulo_insider {
+            background: #FFFFFF !important;
+        }
         .st-key-caja_articulo_insider p, .st-key-caja_articulo_insider li,
         .st-key-caja_articulo_insider span, .st-key-caja_articulo_insider strong,
-        .st-key-caja_articulo_insider em {
-            color: #14241A !important;
+        .st-key-caja_articulo_insider em, .st-key-caja_articulo_insider div {
+            color: #000000 !important;
         }
         .st-key-caja_articulo_insider h1, .st-key-caja_articulo_insider h2,
         .st-key-caja_articulo_insider h3, .st-key-caja_articulo_insider h4 {
@@ -359,7 +398,7 @@ def render_articulo_completo(art: dict):
                 st.markdown(
                     _sin_sangria(f"""
                     <div style="position:relative;">
-                        <img src="{art['imagen']}" style="width:100%; height:380px; object-fit:cover;
+                        <img src="{art['imagen']}" style="width:100%; height:260px; max-width:100%; object-fit:cover;
                              object-position:center top; border-radius:8px; display:block;">
                         <span style="position:absolute; top:10px; left:10px; background:{color_cat};
                              color:#FFFFFF; font-weight:700; font-size:0.68rem; padding:2px 8px;
