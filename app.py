@@ -286,10 +286,34 @@ def _fecha_hora_local(p: dict) -> str:
     return " · ".join(x for x in [_fecha_corta(p["fecha"]) if p.get("fecha") else "", p.get("hora", "")] if x)
 
 
+# Etiquetas en español para el periodo de un partido en vivo — cubre tanto
+# el número de cuarto que da ESPN (1-4, 5 = tiempo extra) como los códigos
+# cortos tipo "Q1"/"HT"/"OT" que da API-Sports.
+_ETIQUETAS_PERIODO_NUM = {1: "1er cuarto", 2: "2do cuarto", 3: "3er cuarto", 4: "4to cuarto", 5: "Tiempo extra"}
+_ETIQUETAS_PERIODO_COD = {
+    "Q1": "1er cuarto", "Q2": "2do cuarto", "Q3": "3er cuarto", "Q4": "4to cuarto",
+    "OT": "Tiempo extra", "HT": "Medio tiempo", "1H": "1ra mitad", "2H": "2da mitad",
+}
+
+
+def _texto_periodo_en_vivo(p: dict) -> str:
+    """Texto para un partido EN VIVO — cuarto/periodo + minuto restante
+    (ej. '2do cuarto · 7:45'), en vez de la hora programada y el estadio."""
+    periodo = p.get("periodo")
+    if isinstance(periodo, int):
+        etiqueta = _ETIQUETAS_PERIODO_NUM.get(periodo, f"Cuarto {periodo}")
+    else:
+        etiqueta = _ETIQUETAS_PERIODO_COD.get(str(periodo).upper(), str(periodo) if periodo else "En vivo")
+    reloj = p.get("reloj", "")
+    return f"{etiqueta} · {reloj}" if reloj else etiqueta
+
+
 def ticker_marcadores(partidos: list, standings: pd.DataFrame = None):
     """Renderiza el ticker horizontal de marcadores estilo NFL.com.
     Si el partido no se ha jugado, en vez de '-' muestra el récord
-    ganados-perdidos de cada equipo en la temporada (ej. 3-4)."""
+    ganados-perdidos de cada equipo en la temporada (ej. 3-4). Si el
+    partido está EN VIVO, muestra el cuarto y el minuto de juego en vez
+    de la hora programada y el estadio."""
     if not partidos:
         return
 
@@ -304,6 +328,9 @@ def ticker_marcadores(partidos: list, standings: pd.DataFrame = None):
         home_score = p["home_score"] if p["home_score"] is not None else registros.get(p["home_abbr"], "-")
         if p["estado"] in ("FT", "AOT"):
             linea1 = "Final" if p["estado"] == "FT" else "Final (OT)"
+            linea2 = ""
+        elif p.get("en_vivo"):
+            linea1 = _texto_periodo_en_vivo(p)
             linea2 = ""
         else:
             linea1 = _fecha_hora_local(p) or "Por confirmar"
@@ -884,6 +911,9 @@ def marcadores_cacheados(season: int, api_key: str = ""):
             "away_score": p["away_score"] if p["away_score"] not in ("-", "", None) else None,
             "home_score": p["home_score"] if p["home_score"] not in ("-", "", None) else None,
             "estado": "FT" if "final" in p.get("estado", "").lower() else "NS",
+            "en_vivo": p.get("en_vivo", False),
+            "periodo": p.get("periodo"),
+            "reloj": p.get("reloj", ""),
             "fecha": p.get("fecha", ""), "hora": "", "timestamp": None, "estadio": "", "ciudad": "",
         }
         for p in crudo

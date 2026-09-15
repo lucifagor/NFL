@@ -223,7 +223,7 @@ def render_tarjeta_teaser(art: dict) -> str:
         )
         imagen_html = f"""
         <div style="position:relative; flex-shrink:0;">
-            <img src="{art['imagen']}" style="width:100%; height:110px;
+            <img src="{art['imagen']}" style="width:100%; height:180px;
                  object-fit:cover; object-position:center top; border-radius:6px; display:block;">
             <span style="position:absolute; top:6px; left:8px; background:{color_cat};
                  color:#FFFFFF; font-weight:700; font-size:0.68rem; padding:2px 8px; border-radius:4px;">{etiqueta_cat}</span>
@@ -248,7 +248,7 @@ def render_tarjeta_teaser(art: dict) -> str:
     <a href="?articulo={articulo_id}" target="_self" style="text-decoration:none;">
     <div class="noticia-card">
         {imagen_html}
-        <p class="noticia-titulo">{art.get('titulo', '')}</p>
+        <p class="noticia-titulo" style="color:#BD4E1E !important;">{art.get('titulo', '')}</p>
         {deck_html}
         <p class="noticia-desc">{art.get('resumen', '')}</p>
         {f'<p style="color:#8B9187; font-size:0.72rem; margin-top:auto;">{meta_txt}</p>' if meta_txt else ''}
@@ -270,11 +270,30 @@ def render_grid_teasers(articulos: list):
                 st.markdown(render_tarjeta_teaser(art), unsafe_allow_html=True)
 
 
-def _render_cuerpo_articulo(art: dict, color_cat: str):
-    """Cuerpo del artículo (Markdown normal + bloque ':::verdict ... :::'
-    destacado si lo trae) — separado en su propia función para poder
-    reusarlo tanto con foto (columna angosta) como sin foto (ancho completo)."""
-    antes, verdict, despues = _separar_bloque_verdict(art.get("contenido", ""))
+_ENCABEZADO_RE = re.compile(r"^#{2,4}\s+.+$", re.MULTILINE)
+
+
+def _dividir_intro_resto(contenido: str) -> tuple[str, str]:
+    """Separa el cuerpo en la 'intro' (todo el texto antes del primer
+    encabezado ##/###/####) y el 'resto' (desde ese encabezado en
+    adelante). La intro se muestra junto a la foto; el resto se muestra a
+    todo el ancho debajo — igual que en el ejemplo de referencia, donde el
+    arranque del texto acompaña la foto y las secciones con subtítulo van
+    a todo lo ancho."""
+    m = _ENCABEZADO_RE.search(contenido)
+    if not m:
+        return contenido.strip(), ""
+    return contenido[:m.start()].strip(), contenido[m.start():].strip()
+
+
+def _render_cuerpo_articulo(contenido: str, color_cat: str):
+    """Renderiza un fragmento del cuerpo del artículo: Markdown normal más
+    el bloque ':::verdict ... :::' destacado si lo trae. Recibe el texto
+    directamente (no el `art` completo) para poder reusarse tanto con la
+    intro (junto a la foto) como con el resto del cuerpo (ancho completo)."""
+    if not contenido or not contenido.strip():
+        return
+    antes, verdict, despues = _separar_bloque_verdict(contenido)
     if antes.strip():
         st.markdown(antes)
     if verdict:
@@ -294,54 +313,38 @@ def _render_cuerpo_articulo(art: dict, color_cat: str):
     if despues.strip():
         st.markdown(despues)
 
-    if not (antes.strip() or verdict or despues.strip()):
-        st.info("_(sin contenido)_")
-
 
 def render_articulo_completo(art: dict):
-    """Pantalla de artículo completo: masthead (fuera del cuadro, sobre el
-    fondo del sitio) y luego un cuadro claro — mismo tono que las tarjetas
-    de la pestaña News — con la foto chica a la izquierda y el texto del
-    artículo a la derecha, para que el cuerpo se lea bien y la foto no
-    domine la pantalla. Si el artículo no trae foto, el texto ocupa todo
-    el ancho del cuadro."""
+    """Pantalla de artículo completo, estilo revista (como el ejemplo de
+    referencia): dentro de un único cuadro claro —mismo tono que las
+    tarjetas de la pestaña News—, la foto chica a la izquierda con el
+    título sobrepuesto, el deck/autor y el arranque del texto a la
+    derecha, y el resto del cuerpo (con sus subtítulos en el naranja de la
+    marca) a todo el ancho debajo. Si el artículo no trae foto, todo el
+    cuerpo ocupa el ancho completo del cuadro."""
     color_cat = CATEGORIAS_COLOR.get(art.get("categoria"), "#BD4E1E")
     etiqueta_cat = CATEGORIAS_LABEL.get(art.get("categoria"), "Insider")
-
-    st.markdown(
-        _sin_sangria(f"""
-        <span style="background:{color_cat}; color:#FFFFFF; font-weight:700;
-            font-size:0.75rem; padding:3px 10px; border-radius:4px;">{etiqueta_cat}</span>
-        """),
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(f"# {art.get('titulo', '')}")
-    if art.get("deck"):
-        st.markdown(
-            _sin_sangria(f"""
-            <p style="color:#9CB3A3; font-size:1.15rem; font-style:italic; margin-top:-8px;">{art['deck']}</p>
-            """),
-            unsafe_allow_html=True,
-        )
-
+    titulo = art.get("titulo", "")
     meta_txt = _linea_meta(art)
-    if meta_txt:
-        st.caption(meta_txt)
+    contenido = art.get("contenido", "")
 
     # El cuadro claro reusa el mismo fondo que noticia-card/stMetric, pero
     # como aquí el contenido es Markdown normal (no la clase .noticia-card),
     # forzamos texto oscuro dentro de ESTE cuadro en particular — si no, se
-    # queda con el color claro del tema y no se distingue sobre el fondo gris.
+    # queda con el color claro del tema oscuro y no se distingue sobre el
+    # fondo gris. Los subtítulos del cuerpo (## Así) van en el naranja que
+    # ya se usa en el resto del sitio, para que resalten como en el ejemplo.
     st.markdown(
         _sin_sangria("""
         <style>
         .st-key-caja_articulo_insider p, .st-key-caja_articulo_insider li,
         .st-key-caja_articulo_insider span, .st-key-caja_articulo_insider strong,
-        .st-key-caja_articulo_insider em, .st-key-caja_articulo_insider h1,
-        .st-key-caja_articulo_insider h2, .st-key-caja_articulo_insider h3,
-        .st-key-caja_articulo_insider h4 {
+        .st-key-caja_articulo_insider em {
             color: #14241A !important;
+        }
+        .st-key-caja_articulo_insider h1, .st-key-caja_articulo_insider h2,
+        .st-key-caja_articulo_insider h3, .st-key-caja_articulo_insider h4 {
+            color: #BD4E1E !important;
         }
         </style>
         """),
@@ -350,12 +353,24 @@ def render_articulo_completo(art: dict):
 
     with st.container(border=True, key="caja_articulo_insider"):
         if art.get("imagen"):
-            col_foto, col_texto = st.columns([1, 2.3], gap="medium")
+            intro, resto = _dividir_intro_resto(contenido)
+            col_foto, col_texto = st.columns([1, 1.5], gap="medium")
             with col_foto:
                 st.markdown(
                     _sin_sangria(f"""
-                    <img src="{art['imagen']}" style="width:100%; height:190px; object-fit:cover;
-                         object-position:center top; border-radius:8px; display:block;">
+                    <div style="position:relative;">
+                        <img src="{art['imagen']}" style="width:100%; height:380px; object-fit:cover;
+                             object-position:center top; border-radius:8px; display:block;">
+                        <span style="position:absolute; top:10px; left:10px; background:{color_cat};
+                             color:#FFFFFF; font-weight:700; font-size:0.68rem; padding:2px 8px;
+                             border-radius:4px;">{etiqueta_cat}</span>
+                        <div style="position:absolute; top:38px; left:10px; right:10px;">
+                            <span style="background:#FFFFFF; color:#14241A; font-weight:800;
+                                 font-size:1.35rem; line-height:1.35; padding:2px 8px;
+                                 -webkit-box-decoration-break:clone; box-decoration-break:clone;
+                                 text-transform:uppercase;">{titulo}</span>
+                        </div>
+                    </div>
                     """),
                     unsafe_allow_html=True,
                 )
@@ -367,6 +382,46 @@ def render_articulo_completo(art: dict):
                         unsafe_allow_html=True,
                     )
             with col_texto:
-                _render_cuerpo_articulo(art, color_cat)
+                if art.get("deck"):
+                    st.markdown(
+                        _sin_sangria(f"""
+                        <p style="color:#5A5A5A; font-size:1.05rem; font-style:italic; margin:0 0 6px 0;">{art['deck']}</p>
+                        """),
+                        unsafe_allow_html=True,
+                    )
+                if meta_txt:
+                    st.markdown(
+                        _sin_sangria(f"""
+                        <p style="color:#8B9187; font-size:0.85rem; margin-bottom:10px;">{meta_txt}</p>
+                        """),
+                        unsafe_allow_html=True,
+                    )
+                _render_cuerpo_articulo(intro, color_cat)
+            if resto.strip():
+                _render_cuerpo_articulo(resto, color_cat)
+            if not contenido.strip():
+                st.info("_(sin contenido)_")
         else:
-            _render_cuerpo_articulo(art, color_cat)
+            st.markdown(
+                _sin_sangria(f"""
+                <p style="color:#14241A; font-size:1.8rem; font-weight:800; margin:0 0 4px 0;">{titulo}</p>
+                """),
+                unsafe_allow_html=True,
+            )
+            if art.get("deck"):
+                st.markdown(
+                    _sin_sangria(f"""
+                    <p style="color:#5A5A5A; font-size:1.05rem; font-style:italic; margin:0 0 6px 0;">{art['deck']}</p>
+                    """),
+                    unsafe_allow_html=True,
+                )
+            if meta_txt:
+                st.markdown(
+                    _sin_sangria(f"""
+                    <p style="color:#8B9187; font-size:0.85rem; margin-bottom:10px;">{meta_txt}</p>
+                    """),
+                    unsafe_allow_html=True,
+                )
+            _render_cuerpo_articulo(contenido, color_cat)
+            if not contenido.strip():
+                st.info("_(sin contenido)_")

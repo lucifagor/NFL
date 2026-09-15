@@ -748,10 +748,25 @@ def obtener_lesiones_liga(limite: int = 25) -> list:
         return [{"error": str(e)}]
 
 
+# Etiquetas en español para el periodo de un partido en vivo — se usan
+# tanto con el número de cuarto que da ESPN (1-4, 5 = tiempo extra) como
+# con los códigos cortos tipo "Q1"/"HT"/"OT" que da API-Sports.
+_ETIQUETAS_PERIODO_NUM = {1: "1er cuarto", 2: "2do cuarto", 3: "3er cuarto", 4: "4to cuarto", 5: "Tiempo extra"}
+_ETIQUETAS_PERIODO_COD = {
+    "Q1": "1er cuarto", "Q2": "2do cuarto", "Q3": "3er cuarto", "Q4": "4to cuarto",
+    "OT": "Tiempo extra", "HT": "Medio tiempo", "1H": "1ra mitad", "2H": "2da mitad",
+}
+# Códigos/estados que indican que el partido está EN VIVO ahora mismo (ni
+# programado/sin empezar ni ya terminado).
+_CODIGOS_EN_VIVO = {"Q1", "Q2", "Q3", "Q4", "OT", "HT", "1H", "2H"}
+
+
 def obtener_marcadores_actuales() -> list:
     """
     Devuelve los partidos de la semana actual según ESPN (en vivo, próximos
-    o recién terminados), con marcador, estado y equipos.
+    o recién terminados), con marcador, estado y equipos. Si el partido
+    está en vivo, incluye también el cuarto/periodo y el reloj de juego
+    (minuto restante) para poder mostrarlo en vez de la hora programada.
     """
     try:
         r = requests.get(ESPN_SCOREBOARD_URL, timeout=10)
@@ -764,7 +779,9 @@ def obtener_marcadores_actuales() -> list:
             competidores = comp.get("competitors", [])
             home = next((c for c in competidores if c.get("homeAway") == "home"), {})
             away = next((c for c in competidores if c.get("homeAway") == "away"), {})
-            estado = comp.get("status", {}).get("type", {}).get("description", "?")
+            status_obj = comp.get("status", {}) or {}
+            tipo = status_obj.get("type", {}) or {}
+            estado = tipo.get("description", "?")
 
             partidos.append({
                 "away_nombre": (away.get("team") or {}).get("displayName", "?"),
@@ -774,6 +791,9 @@ def obtener_marcadores_actuales() -> list:
                 "home_abbr": (home.get("team") or {}).get("abbreviation", "?"),
                 "home_score": home.get("score", "-"),
                 "estado": estado,
+                "en_vivo": tipo.get("state") == "in",
+                "periodo": status_obj.get("period"),
+                "reloj": status_obj.get("displayClock", "") or "",
                 "fecha": ev.get("date", ""),
             })
         # Primero los que faltan por jugar, y hasta el final los que ya
@@ -895,6 +915,11 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
     siguiente de ese margen, salta sola a la próxima jornada. Trae toda
     la temporada en 1 sola consulta y filtra en memoria, para no gastar
     cuota pidiendo semana por semana.
+
+    Si un partido está en vivo, incluye también el cuarto/periodo
+    (código corto como "Q2"/"HT"/"OT") y el reloj de juego, cuando la
+    API lo trae, para poder mostrar el minuto del partido en vez de la
+    hora programada y el estadio.
     """
     data = _api_sports_get(api_key, "/games", {"league": API_SPORTS_LEAGUE_NFL, "season": season})
     juegos = data.get("response", [])
@@ -953,14 +978,21 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
         home = (j.get("teams") or {}).get("home") or {}
         away = (j.get("teams") or {}).get("away") or {}
         scores = j.get("scores") or {}
-        estado = ((j.get("game") or {}).get("status") or {}).get("short", "NS")
+        status_obj = (j.get("game") or {}).get("status") or {}
+        estado = status_obj.get("short", "NS")
         venue = (j.get("game") or {}).get("venue") or {}
+        # El nombre del campo del reloj en vivo varía entre proveedores —
+        # se intentan las variantes más comunes en vez de asumir una sola.
+        reloj = status_obj.get("timer") or status_obj.get("clock") or ""
         resultado.append({
             "away_abbr": _abbr_desde_nombre_api_sports(away.get("name", "")),
             "home_abbr": _abbr_desde_nombre_api_sports(home.get("name", "")),
             "away_score": (scores.get("away") or {}).get("total"),
             "home_score": (scores.get("home") or {}).get("total"),
             "estado": estado,
+            "en_vivo": estado in _CODIGOS_EN_VIVO,
+            "periodo": estado,
+            "reloj": reloj,
             "fecha": (j.get("game") or {}).get("date", {}).get("date", ""),
             "hora": (j.get("game") or {}).get("date", {}).get("time", ""),
             "timestamp": (j.get("game") or {}).get("date", {}).get("timestamp"),
