@@ -26,10 +26,12 @@ Aquí va el cuerpo del artículo completo, en Markdown normal
 (negritas con **así**, listas con "- ", encabezados de sección con "## Así").
 ```
 
-3. `categoria` puede ser: `fantasy`, `analisis`, `datos` o `columna` —
-   define en qué pestaña de Insider aparece.
-4. Cada artículo se muestra primero como una tarjeta (teaser) en la lista de
-   su pestaña, y al hacer clic lleva a una pantalla aparte con el artículo
+3. `categoria` puede ser: `fantasy`, `analisis`, `datos` o `columna` — es
+   solo una etiqueta para organizar/filtrar dentro de Insider (Insider es
+   independiente de la pestaña Fantasy: aquí NUNCA se genera nada
+   automático ni se muestra tu roster — solo lo que tú escribas aquí).
+4. Cada artículo se muestra primero como una tarjeta (teaser) en la grilla
+   de Insider, y al hacer clic lleva a una pantalla aparte con el artículo
    completo — igual que las noticias de la pestaña News.
 5. Para destacar un bloque especial dentro del cuerpo (por ejemplo un
    veredicto o resumen final), envuélvelo así en cualquier parte del texto:
@@ -49,10 +51,6 @@ DENVER PASS RUSH vs. MAHOMES + KC OFFENSIVE LINE
 6. Sube el archivo a tu repo de GitHub junto con el resto del código y
    aparecerá automáticamente la próxima vez que cargue la app. No hace
    falta tocar `app.py` ni `insider_content.py`.
-
-Los artículos con `categoria: datos` normalmente los genera la app sola
-(reportes de lesiones, pronósticos del modelo) — solo usa esa categoría a
-mano si quieres publicar tú mismo un análisis basado en datos.
 
 Ejemplos incluidos en esta carpeta: `2026-09-14-ejemplo-analisis.md`,
 `2026-09-14-ejemplo-columna.md` y `2026-09-14-warrior-the-comeback.md` (este

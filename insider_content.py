@@ -2,27 +2,31 @@
 Lógica de contenido de la sección Insider de NFLWarriors
 =========================================================
 
-La sección Insider combina cuatro tipos de contenido en un mismo lugar:
+Insider es una sección independiente de Fantasy: aquí SOLO viven notas
+periodísticas escritas por ti (el "staff" de NFLWarriors) — análisis,
+columnas de opinión, notas de Fantasy Insider redactadas a mano, etc.
+No hay contenido generado automáticamente a partir de los datos de la app
+(eso vive en la pantalla Fantasy). Cada nota se clasifica con una de estas
+categorías, solo para organizarla dentro de Insider:
 
-  1. "fantasy"  — Fantasy Insider: consejos de tu equipo, start/sit, waiver wire.
+  1. "fantasy"  — Notas de Fantasy Insider (start/sit, waiver wire, etc.)
+                  escritas por ti, no generadas por la app.
   2. "analisis" — Análisis y opinión NFL en general.
-  3. "datos"    — Reportes generados automáticamente a partir de los datos que
-                  ya calcula la app (lesiones, pronósticos del modelo, etc.).
-  4. "columna"  — Columnas de autor que tú escribes a mano.
+  3. "datos"    — Notas basadas en datos que tú redactas a mano.
+  4. "columna"  — Columnas de autor.
 
-Cada artículo se muestra en dos formas, igual que una nota de prensa:
+Cada nota se muestra en dos formas, igual que una nota de prensa:
 
   - TEASER: una tarjeta (con foto, categoría, título, deck y resumen) en la
-    lista de la pestaña que le corresponde — el mismo lenguaje visual que
-    las tarjetas de la pestaña News.
+    grilla de Insider — el mismo lenguaje visual que las tarjetas de la
+    pestaña News.
   - ARTÍCULO COMPLETO: al hacer clic en la tarjeta, se navega a una pantalla
     aparte con el artículo entero (título grande, deck, línea de autor/
     fecha/tiempo de lectura, foto con crédito, cuerpo en Markdown, y un
     bloque especial "Warrior Verdict" si el artículo lo incluye).
 
-Las categorías 2 y 4 (y también la 1, si quieres escribir algo tú mismo en
-vez de dejar que se genere solo) se manejan como archivos Markdown dentro de
-la carpeta `insider_articles/`, cada uno con un encabezado simple al estilo:
+Todas las notas se manejan como archivos Markdown dentro de la carpeta
+`insider_articles/`, cada uno con un encabezado simple al estilo:
 
     ---
     titulo: Mi título
@@ -46,23 +50,16 @@ la carpeta `insider_articles/`, cada uno con un encabezado simple al estilo:
     DENVER PASS RUSH vs. MAHOMES + KC OFFENSIVE LINE
     :::
 
-Para publicar una columna nueva: crea un archivo `.md` dentro de
+Para publicar una nota nueva: crea un archivo `.md` dentro de
 `insider_articles/`, súbelo a tu repo de GitHub junto con el resto del
 código, y aparecerá automáticamente la próxima vez que cargue la app (no
 hace falta tocar nada más).
-
-Las categorías 1 y 3 también incluyen piezas "automáticas": funciones de
-este archivo que arman un artículo a partir de datos en vivo (lesiones,
-pronósticos del modelo, tu propio roster en `mi_equipo.json`). No requieren
-ninguna API de lenguaje — son reportes basados en plantillas, así que
-siempre están disponibles aunque no haya ninguna columna manual todavía.
 """
 
 from __future__ import annotations
 
 import os
 import re
-import json
 import datetime
 import urllib.parse
 import streamlit as st
@@ -167,175 +164,7 @@ def cargar_columnas_manuales(carpeta: str = "insider_articles") -> list:
 
 
 # ---------------------------------------------------------------------------
-# 2. Tu roster (mi_equipo.json) — usado para personalizar Fantasy Insider
-# ---------------------------------------------------------------------------
-def cargar_mi_equipo(ruta: str = "mi_equipo.json") -> dict:
-    """Lee tu roster guardado en mi_equipo.json. Cuando cambies tu
-    alineación (waiver, trade, etc.) edita ese archivo y súbelo a tu repo —
-    no hace falta tocar código."""
-    if not os.path.isfile(ruta):
-        return {}
-    try:
-        with open(ruta, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-# ---------------------------------------------------------------------------
-# 3. Reportes automáticos (plantillas a partir de datos ya calculados)
-# ---------------------------------------------------------------------------
-def _severidad_lesion(estado: str) -> str:
-    e = (estado or "").lower()
-    if any(p in e for p in ["out", "ir", "injured reserve", "pup", "suspend"]):
-        return "fuera"
-    if any(p in e for p in ["doubtful", "questionable", "quest", "duda"]):
-        return "duda"
-    return "otro"
-
-
-def generar_reporte_lesiones_fantasy(
-    lesiones: list, posiciones_relevantes=("QB", "RB", "WR", "TE"),
-) -> dict | None:
-    """Arma un reporte de lesiones filtrado a posiciones que importan para
-    fantasy (QB/RB/WR/TE), separado por severidad."""
-    if not lesiones or "error" in (lesiones[0] if lesiones else {}):
-        return None
-
-    relevantes = [l for l in lesiones if (l.get("posicion") or "").upper() in posiciones_relevantes]
-    if not relevantes:
-        return None
-
-    fuera = [l for l in relevantes if _severidad_lesion(l.get("estado", "")) == "fuera"]
-    dudosos = [l for l in relevantes if _severidad_lesion(l.get("estado", "")) == "duda"]
-
-    def _lista(items):
-        return "\n".join(
-            f"- **{l.get('jugador', '?')}** ({l.get('posicion', '?')}, {l.get('equipo', '?')}) "
-            f"— {l.get('detalle') or l.get('estado', '')}"
-            for l in items[:8]
-        )
-
-    partes = []
-    if fuera:
-        partes.append("**Fuera esta semana:**\n" + _lista(fuera))
-    if dudosos:
-        partes.append("**En duda — vigílalos hasta el día del partido:**\n" + _lista(dudosos))
-
-    if not partes:
-        cuerpo = "No hay lesiones de jugadores de ataque que muevan la aguja esta semana."
-    else:
-        cuerpo = "\n\n".join(partes)
-
-    return {
-        "id": "auto-lesiones",
-        "titulo": "Reporte de lesiones que le importan a tu fantasy",
-        "categoria": "datos",
-        "autor": "NFLWarriors · reporte automático",
-        "fecha": datetime.date.today().isoformat(),
-        "tiempo_lectura": "",
-        "deck": "",
-        "resumen": f"{len(fuera)} jugador(es) fuera y {len(dudosos)} en duda entre QB/RB/WR/TE.",
-        "imagen": "",
-        "imagen_credito": "",
-        "contenido": cuerpo,
-        "auto": True,
-    }
-
-
-def generar_reporte_pronosticos_semana(partidos_con_resultado: list) -> dict | None:
-    """partidos_con_resultado: lista de dicts {away, home, prob_away, prob_home}
-    ya calculados con el modelo de comparar_equipos/probabilidad_victoria."""
-    if not partidos_con_resultado:
-        return None
-
-    ordenados = sorted(
-        partidos_con_resultado, key=lambda p: abs(p["prob_home"] - p["prob_away"]), reverse=True,
-    )
-    mas_parejo = min(partidos_con_resultado, key=lambda p: abs(p["prob_home"] - p["prob_away"]))
-    top_favoritos = ordenados[:3]
-
-    partes = ["**Favoritos más claros del modelo esta semana:**"]
-    for p in top_favoritos:
-        favorito = p["home"] if p["prob_home"] > p["prob_away"] else p["away"]
-        prob = max(p["prob_home"], p["prob_away"])
-        partes.append(f"- {p['away']} @ {p['home']}: favorito **{favorito}** ({prob * 100:.0f}%)")
-
-    partes.append(
-        f"\n**El partido más parejo:** {mas_parejo['away']} @ {mas_parejo['home']} "
-        f"({mas_parejo['prob_away'] * 100:.0f}% – {mas_parejo['prob_home'] * 100:.0f}%) "
-        f"— de ahí suele salir la sorpresa de la semana."
-    )
-
-    return {
-        "id": "auto-pronosticos",
-        "titulo": "Lo que dice el modelo esta semana",
-        "categoria": "analisis",
-        "autor": "NFLWarriors · reporte automático",
-        "fecha": datetime.date.today().isoformat(),
-        "tiempo_lectura": "",
-        "deck": "",
-        "resumen": "Favoritos más claros y el partido más parejo según el modelo de pronóstico.",
-        "imagen": "",
-        "imagen_credito": "",
-        "contenido": "\n".join(partes),
-        "auto": True,
-    }
-
-
-def generar_radar_mi_equipo(mi_equipo: dict, lesiones: list) -> dict | None:
-    """Cruza tu roster (mi_equipo.json) con el reporte de lesiones de la
-    liga para avisarte si alguno de tus jugadores — titular o de banca —
-    aparece con estado de lesión."""
-    if not mi_equipo:
-        return None
-
-    lesionados_por_nombre = {
-        l.get("jugador", "").lower(): l for l in lesiones if "error" not in l
-    }
-
-    alertas = []
-    for grupo, etiqueta in [("titulares", "Titular"), ("banca", "Banca")]:
-        for j in mi_equipo.get(grupo, []):
-            nombre = j.get("jugador", "")
-            info = lesionados_por_nombre.get(nombre.lower())
-            if info:
-                alertas.append(
-                    f"- **{nombre}** ({etiqueta}, {j.get('posicion', '?')}) "
-                    f"— {info.get('estado', '?')}: {info.get('detalle', '')}"
-                )
-
-    if alertas:
-        cuerpo = (
-            "Estos jugadores de tu equipo aparecen en el reporte de lesiones de la liga:\n\n"
-            + "\n".join(alertas)
-        )
-        resumen = f"{len(alertas)} jugador(es) de tu roster con reporte de lesión esta semana."
-    else:
-        cuerpo = (
-            "Ninguno de tus titulares ni jugadores de banca aparece en el reporte de "
-            "lesiones de la liga esta semana — roster limpio."
-        )
-        resumen = "Tu roster está limpio de lesiones reportadas esta semana."
-
-    return {
-        "id": "auto-radar-equipo",
-        "titulo": "Radar de tu equipo",
-        "categoria": "fantasy",
-        "autor": "NFLWarriors · reporte automático",
-        "fecha": datetime.date.today().isoformat(),
-        "tiempo_lectura": "",
-        "deck": "",
-        "resumen": resumen,
-        "imagen": "",
-        "imagen_credito": "",
-        "contenido": cuerpo,
-        "auto": True,
-    }
-
-
-# ---------------------------------------------------------------------------
-# 4. Bloques especiales dentro del cuerpo (ej. ":::verdict ... :::")
+# 2. Bloques especiales dentro del cuerpo (ej. ":::verdict ... :::")
 # ---------------------------------------------------------------------------
 _VERDICT_RE = re.compile(r":::verdict\s*\n(.*?)\n:::", re.DOTALL | re.IGNORECASE)
 
@@ -374,7 +203,7 @@ def _linea_meta(art: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 5. Render — teaser (tarjeta) y artículo completo
+# 3. Render — teaser (tarjeta) y artículo completo
 # ---------------------------------------------------------------------------
 def render_tarjeta_teaser(art: dict) -> str:
     """HTML de una tarjeta tipo teaser — mismo lenguaje visual que las
