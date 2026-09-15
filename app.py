@@ -1605,7 +1605,6 @@ if st.session_state.pagina == "blog":
     encabezado_sitio("blog")
     hero(
         '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Insider</span>',
-        "Notas y columnas del staff de NFLWarriors.",
     )
 
     with st.spinner("Cargando Insider..."):

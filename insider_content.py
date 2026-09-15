@@ -223,7 +223,7 @@ def render_tarjeta_teaser(art: dict) -> str:
         )
         imagen_html = f"""
         <div style="position:relative; flex-shrink:0;">
-            <img src="{art['imagen']}" style="width:100%; height:180px;
+            <img src="{art['imagen']}" style="width:100%; height:110px;
                  object-fit:cover; object-position:center top; border-radius:6px; display:block;">
             <span style="position:absolute; top:6px; left:8px; background:{color_cat};
                  color:#FFFFFF; font-weight:700; font-size:0.68rem; padding:2px 8px; border-radius:4px;">{etiqueta_cat}</span>
@@ -270,10 +270,41 @@ def render_grid_teasers(articulos: list):
                 st.markdown(render_tarjeta_teaser(art), unsafe_allow_html=True)
 
 
+def _render_cuerpo_articulo(art: dict, color_cat: str):
+    """Cuerpo del artículo (Markdown normal + bloque ':::verdict ... :::'
+    destacado si lo trae) — separado en su propia función para poder
+    reusarlo tanto con foto (columna angosta) como sin foto (ancho completo)."""
+    antes, verdict, despues = _separar_bloque_verdict(art.get("contenido", ""))
+    if antes.strip():
+        st.markdown(antes)
+    if verdict:
+        st.markdown(
+            _sin_sangria(f"""
+            <div style="border:2px solid {color_cat}; border-radius:10px; padding:16px 18px;
+                 margin:18px 0; background:rgba(189,78,30,0.10);">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.85rem;
+                     letter-spacing:0.05em; color:{color_cat}; text-transform:uppercase; margin-bottom:6px;">
+                    Warrior Verdict
+                </div>
+                {_md_simple_a_html(verdict)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+    if despues.strip():
+        st.markdown(despues)
+
+    if not (antes.strip() or verdict or despues.strip()):
+        st.info("_(sin contenido)_")
+
+
 def render_articulo_completo(art: dict):
-    """Pantalla de artículo completo: masthead, foto con crédito, cuerpo en
-    Markdown y — si el artículo lo trae — el bloque destacado 'Warrior
-    Verdict' (o cualquier otro bloque ':::verdict ... :::')."""
+    """Pantalla de artículo completo: masthead (fuera del cuadro, sobre el
+    fondo del sitio) y luego un cuadro claro — mismo tono que las tarjetas
+    de la pestaña News — con la foto chica a la izquierda y el texto del
+    artículo a la derecha, para que el cuerpo se lea bien y la foto no
+    domine la pantalla. Si el artículo no trae foto, el texto ocupa todo
+    el ancho del cuadro."""
     color_cat = CATEGORIAS_COLOR.get(art.get("categoria"), "#BD4E1E")
     etiqueta_cat = CATEGORIAS_LABEL.get(art.get("categoria"), "Insider")
 
@@ -298,32 +329,44 @@ def render_articulo_completo(art: dict):
     if meta_txt:
         st.caption(meta_txt)
 
-    if art.get("imagen"):
-        st.image(art["imagen"], use_container_width=True)
-        if art.get("imagen_credito"):
-            st.caption(art["imagen_credito"])
+    # El cuadro claro reusa el mismo fondo que noticia-card/stMetric, pero
+    # como aquí el contenido es Markdown normal (no la clase .noticia-card),
+    # forzamos texto oscuro dentro de ESTE cuadro en particular — si no, se
+    # queda con el color claro del tema y no se distingue sobre el fondo gris.
+    st.markdown(
+        _sin_sangria("""
+        <style>
+        .st-key-caja_articulo_insider p, .st-key-caja_articulo_insider li,
+        .st-key-caja_articulo_insider span, .st-key-caja_articulo_insider strong,
+        .st-key-caja_articulo_insider em, .st-key-caja_articulo_insider h1,
+        .st-key-caja_articulo_insider h2, .st-key-caja_articulo_insider h3,
+        .st-key-caja_articulo_insider h4 {
+            color: #14241A !important;
+        }
+        </style>
+        """),
+        unsafe_allow_html=True,
+    )
 
-    st.divider()
-
-    antes, verdict, despues = _separar_bloque_verdict(art.get("contenido", ""))
-    if antes.strip():
-        st.markdown(antes)
-    if verdict:
-        st.markdown(
-            _sin_sangria(f"""
-            <div style="border:2px solid {color_cat}; border-radius:10px; padding:16px 18px;
-                 margin:18px 0; background:rgba(189,78,30,0.08);">
-                <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.85rem;
-                     letter-spacing:0.05em; color:{color_cat}; text-transform:uppercase; margin-bottom:6px;">
-                    Warrior Verdict
-                </div>
-                {_md_simple_a_html(verdict)}
-            </div>
-            """),
-            unsafe_allow_html=True,
-        )
-    if despues.strip():
-        st.markdown(despues)
-
-    if not (antes.strip() or verdict or despues.strip()):
-        st.info("_(sin contenido)_")
+    with st.container(border=True, key="caja_articulo_insider"):
+        if art.get("imagen"):
+            col_foto, col_texto = st.columns([1, 2.3], gap="medium")
+            with col_foto:
+                st.markdown(
+                    _sin_sangria(f"""
+                    <img src="{art['imagen']}" style="width:100%; height:190px; object-fit:cover;
+                         object-position:center top; border-radius:8px; display:block;">
+                    """),
+                    unsafe_allow_html=True,
+                )
+                if art.get("imagen_credito"):
+                    st.markdown(
+                        _sin_sangria(f"""
+                        <p style="color:#5A5A5A; font-size:0.72rem; margin-top:6px;">{art['imagen_credito']}</p>
+                        """),
+                        unsafe_allow_html=True,
+                    )
+            with col_texto:
+                _render_cuerpo_articulo(art, color_cat)
+        else:
+            _render_cuerpo_articulo(art, color_cat)
