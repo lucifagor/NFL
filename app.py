@@ -67,6 +67,16 @@ from comparador_nfl import (
     ODDS_API_KEY,
 )
 
+from insider_content import (
+    cargar_columnas_manuales,
+    cargar_mi_equipo,
+    generar_reporte_lesiones_fantasy,
+    generar_reporte_pronosticos_semana,
+    generar_radar_mi_equipo,
+    render_grid_teasers,
+    render_articulo_completo,
+)
+
 try:
     API_SPORTS_KEY = st.secrets.get("API_SPORTS_KEY", "")
 except Exception:
@@ -975,6 +985,63 @@ def mostrar_resultado(resultado, equipo_a, equipo_b, clima=None, local=None, com
             st.caption(f"Clima en {local}: {clima.get('temp_c', '?')}°C, viento {clima.get('viento_kmh', '?')} km/h")
 
 
+def cargar_todos_los_articulos_insider(season_insider: int):
+    """Junta las columnas manuales (insider_articles/*.md) con los reportes
+    automáticos (lesiones, radar de tu equipo, pronósticos de la semana) en
+    una sola lista de artículos. La usan tanto la pantalla Insider (lista
+    por pestaña) como la de artículo completo (para poder encontrar el
+    artículo por id sin importar de cuál pestaña vino), así ambas ven
+    siempre el mismo contenido."""
+    columnas_manuales = cargar_columnas_manuales()
+
+    try:
+        mi_equipo = cargar_mi_equipo()
+    except Exception:
+        mi_equipo = {}
+
+    try:
+        lesiones_insider = lesiones_liga_cacheadas(limite=100, season=season_insider, api_key=API_SPORTS_KEY)
+    except Exception:
+        lesiones_insider = []
+
+    articulos_auto = []
+
+    reporte_lesiones = generar_reporte_lesiones_fantasy(lesiones_insider)
+    if reporte_lesiones:
+        articulos_auto.append(reporte_lesiones)
+
+    if mi_equipo:
+        radar_equipo = generar_radar_mi_equipo(mi_equipo, lesiones_insider)
+        if radar_equipo:
+            articulos_auto.append(radar_equipo)
+
+    # Pronósticos de la próxima semana — reutiliza el mismo modelo que la
+    # pestaña Predictions, solo que aquí se resume como artículo.
+    try:
+        partidos_semana = obtener_proximos_partidos(season_insider)
+        stats_insider = stats_cacheadas(season_insider, 2)
+        resultados_semana = []
+        for _, partido in partidos_semana.iterrows():
+            away, home = partido["away_team"], partido["home_team"]
+            if away not in stats_insider["team"].values or home not in stats_insider["team"].values:
+                continue
+            resultado_partido, _ = ejecutar_comparacion(stats_insider, away, home, home, False, False)
+            puntaje_partido = resultado_partido["puntaje"]
+            max_posible = sum(WEIGHTS.values()) + HOME_FIELD_BONUS
+            prob_partido = probabilidad_victoria(puntaje_partido, away, home, max_posible)
+            resultados_semana.append({
+                "away": away, "home": home,
+                "prob_away": prob_partido[away], "prob_home": prob_partido[home],
+            })
+        reporte_pronosticos = generar_reporte_pronosticos_semana(resultados_semana)
+        if reporte_pronosticos:
+            articulos_auto.append(reporte_pronosticos)
+    except Exception:
+        pass
+
+    return columnas_manuales + articulos_auto, mi_equipo
+
+
 # ============================================================
 # NAVEGACIÓN ENTRE PANTALLAS (Inicio ↔ Pronósticos)
 # ============================================================
@@ -1002,6 +1069,13 @@ if st.query_params.get("partido"):
         st.session_state.pagina = "detalle"
     except Exception:
         pass
+    st.query_params.clear()
+
+# Cada tarjeta teaser de Insider es un hipervínculo real (?articulo=ID) a
+# la pantalla de artículo completo — mismo patrón que equipos y partidos.
+if st.query_params.get("articulo"):
+    st.session_state.articulo_detalle = st.query_params["articulo"]
+    st.session_state.pagina = "articulo_detalle"
     st.query_params.clear()
 
 # Detecta la zona horaria del navegador de quien ve la app (una sola vez
@@ -1583,16 +1657,107 @@ if st.session_state.pagina == "fantasy":
 
 
 # ============================================================
-# PANTALLA: BLOG — sección nueva, contenido aún por definir
+# PANTALLA: INSIDER — Fantasy Insider, análisis, reportes automáticos
+# y columnas de autor.
 # ============================================================
 if st.session_state.pagina == "blog":
     encabezado_sitio("blog")
-    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Insider</span>')
-    st.info(
-        "Todavía no hay nada armado aquí — dime qué te gustaría ver "
-        "(artículos de opinión, análisis a fondo, columnas de autor, etc.) "
-        "y lo construimos."
+    hero(
+        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Insider</span>',
+        "Fantasy insider, análisis del modelo, reportes automáticos y columnas de autor.",
     )
+
+    season_insider = datetime.date.today().year
+
+    with st.spinner("Cargando Insider..."):
+        todos_los_articulos, mi_equipo = cargar_todos_los_articulos_insider(season_insider)
+
+    def _articulos_de(categoria: str) -> list:
+        return sorted(
+            [a for a in todos_los_articulos if a.get("categoria") == categoria],
+            key=lambda a: a.get("fecha", ""), reverse=True,
+        )
+
+    tab_fantasy, tab_analisis, tab_datos, tab_columnas = st.tabs([
+        "🏈 Fantasy Insider", "🔎 Análisis NFL", "⚙️ Reportes automáticos", "✍️ Columnas",
+    ])
+
+    with tab_fantasy:
+        if mi_equipo:
+            with st.expander("📋 Ver mi roster actual"):
+                if mi_equipo.get("titulares"):
+                    st.dataframe(pd.DataFrame(mi_equipo["titulares"]), use_container_width=True, hide_index=True)
+                if mi_equipo.get("banca"):
+                    st.caption("Banca")
+                    st.dataframe(pd.DataFrame(mi_equipo["banca"]), use_container_width=True, hide_index=True)
+                if mi_equipo.get("ir"):
+                    st.caption("Lesionados (IR)")
+                    st.dataframe(pd.DataFrame(mi_equipo["ir"]), use_container_width=True, hide_index=True)
+            st.caption(
+                "¿Cambiaste tu alineación (waiver, trade, etc.)? Edita `mi_equipo.json` en tu "
+                "repo de GitHub y se reflejará aquí en el siguiente despliegue."
+            )
+        else:
+            st.caption(
+                "Sube un archivo `mi_equipo.json` a la raíz de tu repo para personalizar "
+                "esta pestaña con tu propio roster."
+            )
+
+        arts = _articulos_de("fantasy")
+        if not arts:
+            st.info("Todavía no hay contenido de Fantasy Insider más allá del radar de tu equipo.")
+        render_grid_teasers(arts)
+
+    with tab_analisis:
+        arts = _articulos_de("analisis")
+        if not arts:
+            st.info(
+                "Todavía no hay artículos de análisis. Agrega uno en `insider_articles/` "
+                "con `categoria: analisis` (ver `insider_articles/_LEEME.md`)."
+            )
+        render_grid_teasers(arts)
+
+    with tab_datos:
+        arts = _articulos_de("datos")
+        if not arts:
+            st.info("Los reportes automáticos aparecerán aquí en cuanto haya datos de lesiones/pronósticos disponibles.")
+        render_grid_teasers(arts)
+
+    with tab_columnas:
+        arts = _articulos_de("columna")
+        if not arts:
+            st.info(
+                "Todavía no hay columnas — escribe la tuya en un archivo `.md` dentro de "
+                "`insider_articles/` (ver `insider_articles/_LEEME.md`) y súbelo a tu repo."
+            )
+        render_grid_teasers(arts)
+
+    st.stop()
+
+
+# ============================================================
+# PANTALLA: ARTÍCULO COMPLETO DE INSIDER (llegada desde una tarjeta
+# teaser en cualquiera de las pestañas de Insider)
+# ============================================================
+if st.session_state.pagina == "articulo_detalle":
+    encabezado_sitio("blog")
+
+    if st.button("← Volver a Insider"):
+        st.session_state.pagina = "blog"
+        st.rerun()
+
+    articulo_id = st.session_state.get("articulo_detalle")
+    season_insider = datetime.date.today().year
+
+    with st.spinner("Cargando artículo..."):
+        todos_los_articulos, _ = cargar_todos_los_articulos_insider(season_insider)
+
+    art = next((a for a in todos_los_articulos if a.get("id") == articulo_id), None)
+    if not art:
+        st.warning("No se encontró ese artículo — puede que ya no esté disponible.")
+        st.stop()
+
+    render_articulo_completo(art)
     st.stop()
 
 
