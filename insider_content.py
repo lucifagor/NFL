@@ -1,0 +1,500 @@
+"""
+Lógica de contenido de la sección Insider de NFLWarriors
+=========================================================
+
+La sección Insider combina cuatro tipos de contenido en un mismo lugar:
+
+  1. "fantasy"  — Fantasy Insider: consejos de tu equipo, start/sit, waiver wire.
+  2. "analisis" — Análisis y opinión NFL en general.
+  3. "datos"    — Reportes generados automáticamente a partir de los datos que
+                  ya calcula la app (lesiones, pronósticos del modelo, etc.).
+  4. "columna"  — Columnas de autor que tú escribes a mano.
+
+Cada artículo se muestra en dos formas, igual que una nota de prensa:
+
+  - TEASER: una tarjeta (con foto, categoría, título, deck y resumen) en la
+    lista de la pestaña que le corresponde — el mismo lenguaje visual que
+    las tarjetas de la pestaña News.
+  - ARTÍCULO COMPLETO: al hacer clic en la tarjeta, se navega a una pantalla
+    aparte con el artículo entero (título grande, deck, línea de autor/
+    fecha/tiempo de lectura, foto con crédito, cuerpo en Markdown, y un
+    bloque especial "Warrior Verdict" si el artículo lo incluye).
+
+Las categorías 2 y 4 (y también la 1, si quieres escribir algo tú mismo en
+vez de dejar que se genere solo) se manejan como archivos Markdown dentro de
+la carpeta `insider_articles/`, cada uno con un encabezado simple al estilo:
+
+    ---
+    titulo: Mi título
+    categoria: analisis
+    autor: Tu nombre
+    fecha: 2026-09-14
+    tiempo_lectura: 7 min       (opcional)
+    deck: Subtítulo/gancho de una línea (opcional)
+    resumen: Resumen corto para la tarjeta (1-3 líneas).
+    imagen: https://...                     (opcional)
+    imagen_credito: Foto: Fulano / Fuente (Licencia)   (opcional)
+    ---
+
+    El resto del archivo es el cuerpo del artículo completo, en Markdown
+    normal. Para resaltar un bloque como "Warrior Verdict" (o cualquier otro
+    llamado especial), envuélvelo así en cualquier parte del cuerpo:
+
+    :::verdict
+    **THE BATTLE TO WATCH**
+
+    DENVER PASS RUSH vs. MAHOMES + KC OFFENSIVE LINE
+    :::
+
+Para publicar una columna nueva: crea un archivo `.md` dentro de
+`insider_articles/`, súbelo a tu repo de GitHub junto con el resto del
+código, y aparecerá automáticamente la próxima vez que cargue la app (no
+hace falta tocar nada más).
+
+Las categorías 1 y 3 también incluyen piezas "automáticas": funciones de
+este archivo que arman un artículo a partir de datos en vivo (lesiones,
+pronósticos del modelo, tu propio roster en `mi_equipo.json`). No requieren
+ninguna API de lenguaje — son reportes basados en plantillas, así que
+siempre están disponibles aunque no haya ninguna columna manual todavía.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import json
+import datetime
+import urllib.parse
+import streamlit as st
+
+
+# ---------------------------------------------------------------------------
+# Utilidades compartidas
+# ---------------------------------------------------------------------------
+def _sin_sangria(html: str) -> str:
+    """Igual que en app.py — evita que Streamlit interprete HTML con
+    sangría como bloque de código."""
+    return "\n".join(line.strip() for line in html.strip().split("\n"))
+
+
+CATEGORIAS_LABEL = {
+    "fantasy": "Fantasy Insider",
+    "analisis": "Análisis NFL",
+    "datos": "Reporte automático",
+    "columna": "Columna",
+}
+
+CATEGORIAS_COLOR = {
+    "fantasy": "#BD4E1E",
+    "analisis": "#1B5FBF",
+    "datos": "#5CB85C",
+    "columna": "#8B5CF6",
+}
+
+# Campos de metadatos que reconocemos en el encabezado de los .md — el resto
+# de líneas del encabezado se ignoran en vez de tronar, por si alguien
+# agrega algo extra a mano.
+_CAMPOS_FRONTMATTER = [
+    "titulo", "categoria", "autor", "fecha", "tiempo_lectura",
+    "deck", "resumen", "imagen", "imagen_credito",
+]
+
+
+# ---------------------------------------------------------------------------
+# 1. Carga de columnas/artículos manuales (archivos .md en insider_articles/)
+# ---------------------------------------------------------------------------
+def _parsear_frontmatter(texto: str) -> tuple[dict, str]:
+    """Parsea un encabezado simple `clave: valor` (una por línea) delimitado
+    por líneas '---' al inicio del archivo. No soporta listas ni anidamiento
+    — alcanza para los campos que usamos, y evita depender de una librería
+    de YAML."""
+    m = re.match(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", texto, re.DOTALL)
+    if not m:
+        return {}, texto.strip()
+    bloque, cuerpo = m.groups()
+    meta = {}
+    for linea in bloque.splitlines():
+        if ":" in linea:
+            clave, _, valor = linea.partition(":")
+            meta[clave.strip().lower()] = valor.strip().strip('"').strip("'")
+    return meta, cuerpo.strip()
+
+
+def cargar_columnas_manuales(carpeta: str = "insider_articles") -> list:
+    """Lee todos los archivos .md de la carpeta de artículos (menos los que
+    empiezan con '_' o son un README/LEEME, que se tratan como
+    documentación, no como artículos) y los convierte en la misma forma de
+    diccionario que usan los reportes automáticos."""
+    if not os.path.isdir(carpeta):
+        return []
+
+    articulos = []
+    for nombre in sorted(os.listdir(carpeta)):
+        if not nombre.lower().endswith(".md"):
+            continue
+        if nombre.startswith("_") or nombre.lower() in ("readme.md", "leeme.md"):
+            continue
+
+        ruta = os.path.join(carpeta, nombre)
+        try:
+            with open(ruta, "r", encoding="utf-8") as f:
+                texto = f.read()
+        except Exception:
+            continue
+
+        meta, cuerpo = _parsear_frontmatter(texto)
+        categoria = meta.get("categoria", "columna").lower()
+        if categoria not in CATEGORIAS_LABEL:
+            categoria = "columna"
+
+        articulos.append({
+            "id": nombre,
+            "titulo": meta.get("titulo", nombre.replace(".md", "")),
+            "categoria": categoria,
+            "autor": meta.get("autor", "NFLWarriors"),
+            "fecha": meta.get("fecha", ""),
+            "tiempo_lectura": meta.get("tiempo_lectura", ""),
+            "deck": meta.get("deck", ""),
+            "resumen": meta.get("resumen", ""),
+            "imagen": meta.get("imagen", ""),
+            "imagen_credito": meta.get("imagen_credito", ""),
+            "contenido": cuerpo,
+            "auto": False,
+        })
+
+    articulos.sort(key=lambda a: a.get("fecha", ""), reverse=True)
+    return articulos
+
+
+# ---------------------------------------------------------------------------
+# 2. Tu roster (mi_equipo.json) — usado para personalizar Fantasy Insider
+# ---------------------------------------------------------------------------
+def cargar_mi_equipo(ruta: str = "mi_equipo.json") -> dict:
+    """Lee tu roster guardado en mi_equipo.json. Cuando cambies tu
+    alineación (waiver, trade, etc.) edita ese archivo y súbelo a tu repo —
+    no hace falta tocar código."""
+    if not os.path.isfile(ruta):
+        return {}
+    try:
+        with open(ruta, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# 3. Reportes automáticos (plantillas a partir de datos ya calculados)
+# ---------------------------------------------------------------------------
+def _severidad_lesion(estado: str) -> str:
+    e = (estado or "").lower()
+    if any(p in e for p in ["out", "ir", "injured reserve", "pup", "suspend"]):
+        return "fuera"
+    if any(p in e for p in ["doubtful", "questionable", "quest", "duda"]):
+        return "duda"
+    return "otro"
+
+
+def generar_reporte_lesiones_fantasy(
+    lesiones: list, posiciones_relevantes=("QB", "RB", "WR", "TE"),
+) -> dict | None:
+    """Arma un reporte de lesiones filtrado a posiciones que importan para
+    fantasy (QB/RB/WR/TE), separado por severidad."""
+    if not lesiones or "error" in (lesiones[0] if lesiones else {}):
+        return None
+
+    relevantes = [l for l in lesiones if (l.get("posicion") or "").upper() in posiciones_relevantes]
+    if not relevantes:
+        return None
+
+    fuera = [l for l in relevantes if _severidad_lesion(l.get("estado", "")) == "fuera"]
+    dudosos = [l for l in relevantes if _severidad_lesion(l.get("estado", "")) == "duda"]
+
+    def _lista(items):
+        return "\n".join(
+            f"- **{l.get('jugador', '?')}** ({l.get('posicion', '?')}, {l.get('equipo', '?')}) "
+            f"— {l.get('detalle') or l.get('estado', '')}"
+            for l in items[:8]
+        )
+
+    partes = []
+    if fuera:
+        partes.append("**Fuera esta semana:**\n" + _lista(fuera))
+    if dudosos:
+        partes.append("**En duda — vigílalos hasta el día del partido:**\n" + _lista(dudosos))
+
+    if not partes:
+        cuerpo = "No hay lesiones de jugadores de ataque que muevan la aguja esta semana."
+    else:
+        cuerpo = "\n\n".join(partes)
+
+    return {
+        "id": "auto-lesiones",
+        "titulo": "Reporte de lesiones que le importan a tu fantasy",
+        "categoria": "datos",
+        "autor": "NFLWarriors · reporte automático",
+        "fecha": datetime.date.today().isoformat(),
+        "tiempo_lectura": "",
+        "deck": "",
+        "resumen": f"{len(fuera)} jugador(es) fuera y {len(dudosos)} en duda entre QB/RB/WR/TE.",
+        "imagen": "",
+        "imagen_credito": "",
+        "contenido": cuerpo,
+        "auto": True,
+    }
+
+
+def generar_reporte_pronosticos_semana(partidos_con_resultado: list) -> dict | None:
+    """partidos_con_resultado: lista de dicts {away, home, prob_away, prob_home}
+    ya calculados con el modelo de comparar_equipos/probabilidad_victoria."""
+    if not partidos_con_resultado:
+        return None
+
+    ordenados = sorted(
+        partidos_con_resultado, key=lambda p: abs(p["prob_home"] - p["prob_away"]), reverse=True,
+    )
+    mas_parejo = min(partidos_con_resultado, key=lambda p: abs(p["prob_home"] - p["prob_away"]))
+    top_favoritos = ordenados[:3]
+
+    partes = ["**Favoritos más claros del modelo esta semana:**"]
+    for p in top_favoritos:
+        favorito = p["home"] if p["prob_home"] > p["prob_away"] else p["away"]
+        prob = max(p["prob_home"], p["prob_away"])
+        partes.append(f"- {p['away']} @ {p['home']}: favorito **{favorito}** ({prob * 100:.0f}%)")
+
+    partes.append(
+        f"\n**El partido más parejo:** {mas_parejo['away']} @ {mas_parejo['home']} "
+        f"({mas_parejo['prob_away'] * 100:.0f}% – {mas_parejo['prob_home'] * 100:.0f}%) "
+        f"— de ahí suele salir la sorpresa de la semana."
+    )
+
+    return {
+        "id": "auto-pronosticos",
+        "titulo": "Lo que dice el modelo esta semana",
+        "categoria": "analisis",
+        "autor": "NFLWarriors · reporte automático",
+        "fecha": datetime.date.today().isoformat(),
+        "tiempo_lectura": "",
+        "deck": "",
+        "resumen": "Favoritos más claros y el partido más parejo según el modelo de pronóstico.",
+        "imagen": "",
+        "imagen_credito": "",
+        "contenido": "\n".join(partes),
+        "auto": True,
+    }
+
+
+def generar_radar_mi_equipo(mi_equipo: dict, lesiones: list) -> dict | None:
+    """Cruza tu roster (mi_equipo.json) con el reporte de lesiones de la
+    liga para avisarte si alguno de tus jugadores — titular o de banca —
+    aparece con estado de lesión."""
+    if not mi_equipo:
+        return None
+
+    lesionados_por_nombre = {
+        l.get("jugador", "").lower(): l for l in lesiones if "error" not in l
+    }
+
+    alertas = []
+    for grupo, etiqueta in [("titulares", "Titular"), ("banca", "Banca")]:
+        for j in mi_equipo.get(grupo, []):
+            nombre = j.get("jugador", "")
+            info = lesionados_por_nombre.get(nombre.lower())
+            if info:
+                alertas.append(
+                    f"- **{nombre}** ({etiqueta}, {j.get('posicion', '?')}) "
+                    f"— {info.get('estado', '?')}: {info.get('detalle', '')}"
+                )
+
+    if alertas:
+        cuerpo = (
+            "Estos jugadores de tu equipo aparecen en el reporte de lesiones de la liga:\n\n"
+            + "\n".join(alertas)
+        )
+        resumen = f"{len(alertas)} jugador(es) de tu roster con reporte de lesión esta semana."
+    else:
+        cuerpo = (
+            "Ninguno de tus titulares ni jugadores de banca aparece en el reporte de "
+            "lesiones de la liga esta semana — roster limpio."
+        )
+        resumen = "Tu roster está limpio de lesiones reportadas esta semana."
+
+    return {
+        "id": "auto-radar-equipo",
+        "titulo": "Radar de tu equipo",
+        "categoria": "fantasy",
+        "autor": "NFLWarriors · reporte automático",
+        "fecha": datetime.date.today().isoformat(),
+        "tiempo_lectura": "",
+        "deck": "",
+        "resumen": resumen,
+        "imagen": "",
+        "imagen_credito": "",
+        "contenido": cuerpo,
+        "auto": True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 4. Bloques especiales dentro del cuerpo (ej. ":::verdict ... :::")
+# ---------------------------------------------------------------------------
+_VERDICT_RE = re.compile(r":::verdict\s*\n(.*?)\n:::", re.DOTALL | re.IGNORECASE)
+
+
+def _separar_bloque_verdict(contenido: str) -> tuple[str, str | None, str]:
+    """Si el cuerpo trae un bloque ':::verdict ... :::', lo separa del
+    resto para poder renderizarlo aparte con un estilo destacado. Devuelve
+    (texto_antes, texto_del_bloque_o_None, texto_despues)."""
+    m = _VERDICT_RE.search(contenido)
+    if not m:
+        return contenido, None, ""
+    return contenido[:m.start()].strip(), m.group(1).strip(), contenido[m.end():].strip()
+
+
+def _md_simple_a_html(texto: str) -> str:
+    """Conversión mínima de Markdown a HTML — solo **negritas** y párrafos
+    separados por línea en blanco. Alcanza para bloques cortos como
+    'Warrior Verdict'; el cuerpo normal del artículo usa st.markdown, que
+    soporta Markdown completo."""
+    partes = [p.strip() for p in texto.strip().split("\n\n") if p.strip()]
+    html_partes = []
+    for p in partes:
+        p_html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", p)
+        p_html = p_html.replace("\n", "<br>")
+        html_partes.append(f"<p style='margin:4px 0;'>{p_html}</p>")
+    return "".join(html_partes)
+
+
+def _linea_meta(art: dict) -> str:
+    partes = [p for p in [
+        f"Por {art['autor']}" if art.get("autor") else "",
+        art.get("fecha", ""),
+        f"{art['tiempo_lectura']} de lectura" if art.get("tiempo_lectura") else "",
+    ] if p]
+    return "  ·  ".join(partes)
+
+
+# ---------------------------------------------------------------------------
+# 5. Render — teaser (tarjeta) y artículo completo
+# ---------------------------------------------------------------------------
+def render_tarjeta_teaser(art: dict) -> str:
+    """HTML de una tarjeta tipo teaser — mismo lenguaje visual que las
+    tarjetas de la pestaña News (clase .noticia-card): foto con la
+    categoría sobrepuesta, título, deck, resumen y línea de autor/fecha.
+    Toda la tarjeta es un hipervínculo real (?articulo=ID), igual que ya
+    se usa para navegar a equipos y partidos en el resto del sitio."""
+    color_cat = CATEGORIAS_COLOR.get(art.get("categoria"), "#BD4E1E")
+    etiqueta_cat = CATEGORIAS_LABEL.get(art.get("categoria"), "Insider")
+    articulo_id = urllib.parse.quote(str(art.get("id", "")), safe="")
+
+    if art.get("imagen"):
+        sello_auto = (
+            '<span style="position:absolute; bottom:6px; right:8px; background:rgba(0,0,0,0.6); '
+            'color:#FFFFFF; font-size:0.65rem; padding:2px 7px; border-radius:4px;">⚙️ auto</span>'
+            if art.get("auto") else ""
+        )
+        imagen_html = f"""
+        <div style="position:relative; flex-shrink:0;">
+            <img src="{art['imagen']}" style="width:100%; height:180px;
+                 object-fit:cover; object-position:center top; border-radius:6px; display:block;">
+            <span style="position:absolute; top:6px; left:8px; background:{color_cat};
+                 color:#FFFFFF; font-weight:700; font-size:0.68rem; padding:2px 8px; border-radius:4px;">{etiqueta_cat}</span>
+            {sello_auto}
+        </div>"""
+    else:
+        sello_auto = " · ⚙️ auto" if art.get("auto") else ""
+        imagen_html = f"""
+        <div style="margin-bottom:6px;">
+            <span style="background:{color_cat}; color:#FFFFFF; font-weight:700;
+                 font-size:0.68rem; padding:2px 8px; border-radius:4px;">{etiqueta_cat}</span>
+            <span style="color:#8B9187; font-size:0.68rem;">{sello_auto}</span>
+        </div>"""
+
+    deck_html = (
+        f'<p style="color:#5A5A5A; font-size:0.8rem; font-style:italic; margin:8px 0 4px 0;">{art["deck"]}</p>'
+        if art.get("deck") else ""
+    )
+    meta_txt = _linea_meta(art)
+
+    return _sin_sangria(f"""
+    <a href="?articulo={articulo_id}" target="_self" style="text-decoration:none;">
+    <div class="noticia-card">
+        {imagen_html}
+        <p class="noticia-titulo">{art.get('titulo', '')}</p>
+        {deck_html}
+        <p class="noticia-desc">{art.get('resumen', '')}</p>
+        {f'<p style="color:#8B9187; font-size:0.72rem; margin-top:auto;">{meta_txt}</p>' if meta_txt else ''}
+    </div>
+    </a>
+    """)
+
+
+def render_grid_teasers(articulos: list):
+    """Grilla de 2 columnas de tarjetas teaser — mismo patrón que
+    renderizar_noticias() en app.py."""
+    if not articulos:
+        return
+    for i in range(0, len(articulos), 2):
+        par = articulos[i:i + 2]
+        cols = st.columns(2, gap="small")
+        for col, art in zip(cols, par):
+            with col:
+                st.markdown(render_tarjeta_teaser(art), unsafe_allow_html=True)
+
+
+def render_articulo_completo(art: dict):
+    """Pantalla de artículo completo: masthead, foto con crédito, cuerpo en
+    Markdown y — si el artículo lo trae — el bloque destacado 'Warrior
+    Verdict' (o cualquier otro bloque ':::verdict ... :::')."""
+    color_cat = CATEGORIAS_COLOR.get(art.get("categoria"), "#BD4E1E")
+    etiqueta_cat = CATEGORIAS_LABEL.get(art.get("categoria"), "Insider")
+
+    st.markdown(
+        _sin_sangria(f"""
+        <span style="background:{color_cat}; color:#FFFFFF; font-weight:700;
+            font-size:0.75rem; padding:3px 10px; border-radius:4px;">{etiqueta_cat}</span>
+        """),
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(f"# {art.get('titulo', '')}")
+    if art.get("deck"):
+        st.markdown(
+            _sin_sangria(f"""
+            <p style="color:#9CB3A3; font-size:1.15rem; font-style:italic; margin-top:-8px;">{art['deck']}</p>
+            """),
+            unsafe_allow_html=True,
+        )
+
+    meta_txt = _linea_meta(art)
+    if meta_txt:
+        st.caption(meta_txt)
+
+    if art.get("imagen"):
+        st.image(art["imagen"], use_container_width=True)
+        if art.get("imagen_credito"):
+            st.caption(art["imagen_credito"])
+
+    st.divider()
+
+    antes, verdict, despues = _separar_bloque_verdict(art.get("contenido", ""))
+    if antes.strip():
+        st.markdown(antes)
+    if verdict:
+        st.markdown(
+            _sin_sangria(f"""
+            <div style="border:2px solid {color_cat}; border-radius:10px; padding:16px 18px;
+                 margin:18px 0; background:rgba(189,78,30,0.08);">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.85rem;
+                     letter-spacing:0.05em; color:{color_cat}; text-transform:uppercase; margin-bottom:6px;">
+                    Warrior Verdict
+                </div>
+                {_md_simple_a_html(verdict)}
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+    if despues.strip():
+        st.markdown(despues)
+
+    if not (antes.strip() or verdict or despues.strip()):
+        st.info("_(sin contenido)_")
