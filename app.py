@@ -1097,26 +1097,29 @@ def _fila_score_semana(p: dict) -> str:
         score_home = "-"
 
     return f"""
-    <div style="display:flex; align-items:stretch; border-radius:8px; overflow:hidden;
-         margin-bottom:10px; box-shadow:0 3px 8px rgba(0,0,0,0.4); min-height:58px;">
-        <div style="flex:1; background:{color_away}; display:flex; align-items:center; gap:10px;
-             padding:0 14px; min-width:0;">
-            <img src="{logo_url(away)}" style="width:34px; height:34px; object-fit:contain; flex-shrink:0;">
-            <span style="color:{texto_away}; font-weight:800; font-size:0.92rem; text-shadow:0 1px 2px rgba(0,0,0,0.45);
-                 flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    <div style="display:flex; align-items:stretch; justify-content:center; border-radius:8px; overflow:hidden;
+         margin-bottom:10px; box-shadow:0 3px 8px rgba(0,0,0,0.4); min-height:52px; max-width:520px;
+         margin-left:auto; margin-right:auto;">
+        <div style="flex:0 1 220px; background:{color_away}; display:flex; align-items:center;
+             padding:0 10px; min-width:0;">
+            <img src="{logo_url(away)}" style="width:28px; height:28px; object-fit:contain; flex-shrink:0; margin-right:8px;">
+            <span style="color:{texto_away}; font-weight:800; font-size:0.82rem; text-shadow:0 1px 2px rgba(0,0,0,0.45);
+                 min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
                  text-transform:uppercase;">{NOMBRES_EQUIPO.get(away, away)}</span>
-            <span style="color:#FFD200; font-weight:800; font-size:1.3rem; flex-shrink:0;">{score_away}</span>
+            <span style="color:#FFD200; font-weight:800; font-size:1.05rem; flex-shrink:0; margin-left:auto;
+                 padding-left:8px;">{score_away}</span>
         </div>
-        <div style="flex:0 0 auto; background:#0B0F14; color:#FFFFFF; font-weight:700; font-size:0.72rem;
-             display:flex; align-items:center; justify-content:center; padding:0 14px; text-align:center;
-             min-width:96px; white-space:normal; line-height:1.2;">{centro}</div>
-        <div style="flex:1; background:{color_home}; display:flex; align-items:center; gap:10px;
-             padding:0 14px; min-width:0; flex-direction:row-reverse;">
-            <img src="{logo_url(home)}" style="width:34px; height:34px; object-fit:contain; flex-shrink:0;">
-            <span style="color:{texto_home}; font-weight:800; font-size:0.92rem; text-shadow:0 1px 2px rgba(0,0,0,0.45);
-                 flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right;
-                 text-transform:uppercase;">{NOMBRES_EQUIPO.get(home, home)}</span>
-            <span style="color:#FFD200; font-weight:800; font-size:1.3rem; flex-shrink:0;">{score_home}</span>
+        <div style="flex:0 0 auto; background:#0B0F14; color:#FFFFFF; font-weight:700; font-size:0.7rem;
+             display:flex; align-items:center; justify-content:center; padding:0 10px; text-align:center;
+             min-width:76px; white-space:normal; line-height:1.2;">{centro}</div>
+        <div style="flex:0 1 220px; background:{color_home}; display:flex; align-items:center;
+             padding:0 10px; min-width:0;">
+            <span style="color:#FFD200; font-weight:800; font-size:1.05rem; flex-shrink:0; margin-right:auto;
+                 padding-right:8px;">{score_home}</span>
+            <span style="color:{texto_home}; font-weight:800; font-size:0.82rem; text-shadow:0 1px 2px rgba(0,0,0,0.45);
+                 min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                 text-transform:uppercase; margin-right:8px;">{NOMBRES_EQUIPO.get(home, home)}</span>
+            <img src="{logo_url(home)}" style="width:28px; height:28px; object-fit:contain; flex-shrink:0;">
         </div>
     </div>"""
 
