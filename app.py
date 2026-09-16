@@ -227,7 +227,13 @@ def inyectar_estilos():
     /* Selector de temporada (Standings) — angosto, del ancho de la palabra */
     div[class*="st-key-selector_temporada"] { max-width: 130px; }
     div[class*="st-key-selector_lesiones"] { max-width: 260px; margin-bottom: 10px; }
-    div[class*="st-key-selector_semana_scores"] { max-width: 130px; margin-bottom: 10px; }
+    /* Navegación de semana en Scores — botones ◀/▶ pegados a los lados
+       del título "WEEK N", en vez del selector desplegable anterior. */
+    div[class*="st-key-nav_semana_scores"] { max-width: 320px; margin: 0 auto 6px auto; }
+    div[class*="st-key-nav_semana_scores"] [data-testid="stHorizontalBlock"] { align-items: center; }
+    div[class*="st-key-nav_semana_scores"] button {
+        font-size: 1.4rem; font-weight: 800; line-height: 1; padding: 0.35rem 0;
+    }
 
     /* Todos los cuadros/casillas de información (contenedores con borde,
        métricas, tablas) del mismo gris que las tarjetas de noticias */
@@ -1072,15 +1078,13 @@ def mostrar_resultado(resultado, equipo_a, equipo_b, clima=None, local=None, com
 
 
 def _fila_score_semana(p: dict) -> str:
-    """Una fila de la pantalla Scores: mitad izquierda con el color del
-    equipo visitante, mitad derecha con el del local, marcador o
-    fecha/hora si el partido todavía no se juega, y "FINAL"/estado al
-    centro — mismo lenguaje visual que la referencia tipo NFL.com."""
+    """Una fila de la pantalla Scores: fondo blanco neutro de ambos lados
+    (sin el color de cada equipo, que hacía ilegibles algunos logos),
+    marcador o fecha/hora si el partido todavía no se juega, y
+    "FINAL"/estado al centro."""
     away, home = p["away_abbr"], p["home_abbr"]
-    color_away = _COLORES_EQUIPO.get(away, "#22314A")
-    color_home = _COLORES_EQUIPO.get(home, "#22314A")
-    texto_away = "#14241A" if away in _EQUIPOS_TEXTO_OSCURO else "#FFFFFF"
-    texto_home = "#14241A" if home in _EQUIPOS_TEXTO_OSCURO else "#FFFFFF"
+    NEGRO = "#14241A"
+    ACENTO = "#BD4E1E"
 
     jugado = p["estado"] in ("FT", "AOT")
     if jugado:
@@ -1098,47 +1102,42 @@ def _fila_score_semana(p: dict) -> str:
 
     return f"""
     <div style="display:flex; align-items:stretch; justify-content:center; border-radius:8px; overflow:hidden;
-         margin-bottom:10px; box-shadow:0 3px 8px rgba(0,0,0,0.4); min-height:52px; max-width:520px;
+         margin-bottom:10px; border:1.5px solid #E3E6E1; min-height:52px; max-width:480px;
          margin-left:auto; margin-right:auto;">
-        <div style="flex:0 1 220px; background:{color_away}; display:flex; align-items:center;
-             padding:0 10px; min-width:0;">
-            <img src="{logo_url(away)}" style="width:28px; height:28px; object-fit:contain; flex-shrink:0; margin-right:8px;">
-            <span style="color:{texto_away}; font-weight:800; font-size:0.82rem; text-shadow:0 1px 2px rgba(0,0,0,0.45);
+        <div style="flex:0 1 200px; background:#FFFFFF; display:flex; align-items:center;
+             padding:0 8px; min-width:0;">
+            <img src="{logo_url(away)}" style="width:24px; height:24px; object-fit:contain; flex-shrink:0; margin-right:6px;">
+            <span style="color:{NEGRO}; font-weight:800; font-size:0.74rem;
                  min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
                  text-transform:uppercase;">{NOMBRES_EQUIPO.get(away, away)}</span>
-            <span style="color:#FFD200; font-weight:800; font-size:1.05rem; flex-shrink:0; margin-left:auto;
+            <span style="color:{ACENTO}; font-weight:800; font-size:1rem; flex-shrink:0; margin-left:auto;
                  padding-left:8px;">{score_away}</span>
         </div>
-        <div style="flex:0 0 auto; background:#0B0F14; color:#FFFFFF; font-weight:700; font-size:0.7rem;
-             display:flex; align-items:center; justify-content:center; padding:0 10px; text-align:center;
-             min-width:76px; white-space:normal; line-height:1.2;">{centro}</div>
-        <div style="flex:0 1 220px; background:{color_home}; display:flex; align-items:center;
-             padding:0 10px; min-width:0;">
-            <span style="color:#FFD200; font-weight:800; font-size:1.05rem; flex-shrink:0; margin-right:auto;
-                 padding-right:8px;">{score_home}</span>
-            <span style="color:{texto_home}; font-weight:800; font-size:0.82rem; text-shadow:0 1px 2px rgba(0,0,0,0.45);
+        <div style="flex:0 0 auto; background:#F1F3EF; color:{NEGRO}; font-weight:700; font-size:0.68rem;
+             display:flex; align-items:center; justify-content:center; padding:0 8px; text-align:center;
+             min-width:68px; white-space:normal; line-height:1.2; border-left:1.5px solid #E3E6E1;
+             border-right:1.5px solid #E3E6E1;">{centro}</div>
+        <div style="flex:0 1 200px; background:#FFFFFF; display:flex; align-items:center;
+             padding:0 8px; min-width:0;">
+            <span style="color:{ACENTO}; font-weight:800; font-size:1rem; flex-shrink:0; margin-right:auto;
+                 padding-right:6px;">{score_home}</span>
+            <span style="color:{NEGRO}; font-weight:800; font-size:0.74rem;
                  min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
                  text-transform:uppercase; margin-right:8px;">{NOMBRES_EQUIPO.get(home, home)}</span>
-            <img src="{logo_url(home)}" style="width:28px; height:28px; object-fit:contain; flex-shrink:0;">
+            <img src="{logo_url(home)}" style="width:24px; height:24px; object-fit:contain; flex-shrink:0;">
         </div>
     </div>"""
 
 
-def tabla_semana_scores_html(week: int, partidos: list) -> str:
-    """Bloque completo de la pantalla Scores para una semana: encabezado
-    tipo "WEEK N" + una fila por partido (ver _fila_score_semana)."""
+def tabla_semana_scores_html(partidos: list) -> str:
+    """Bloque de resultados de la semana: una fila por partido (ver
+    _fila_score_semana). El título "WEEK N" y la navegación entre
+    semanas se muestran aparte, con controles nativos de Streamlit
+    (ver pantalla Scores) para poder reaccionar a los botones ◀/▶."""
     filas = "".join(_fila_score_semana(p) for p in partidos)
     return _sin_sangria(f"""
-    <div style="background:#000000; border-radius:14px; padding:20px 20px 8px 20px; margin-bottom:16px;">
-        <div style="display:flex; align-items:center; gap:14px; margin-bottom:18px;">
-            <img src="{LOGO_ESCUDO_URL}" width="46">
-            <div>
-                <div style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:2rem;
-                     color:#FFFFFF; line-height:1;">WEEK {week}</div>
-                <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.9rem;
-                     color:#BD4E1E; letter-spacing:0.08em; margin-top:2px;">RESULTADOS</div>
-            </div>
-        </div>
+    <div style="background:#FFFFFF; border-radius:14px; padding:14px 14px 4px 14px; margin-bottom:16px;
+         max-width:520px; margin-left:auto; margin-right:auto; box-shadow:0 3px 10px rgba(0,0,0,0.25);">
         {filas}
     </div>
     """)
@@ -1530,11 +1529,27 @@ if st.session_state.pagina == "scores":
         semana_default = 1
     semana_default = min(max(int(semana_default), 1), 18)
 
-    with st.container(key="selector_semana_scores"):
-        week_scores = st.selectbox(
-            "Semana", list(range(1, 19)), index=semana_default - 1,
-            key="semana_scores", label_visibility="collapsed",
-        )
+    if "semana_scores_num" not in st.session_state:
+        st.session_state.semana_scores_num = semana_default
+
+    with st.container(key="nav_semana_scores"):
+        col_izq, col_centro, col_der = st.columns([1, 2, 1])
+        with col_izq:
+            if st.button("◀", key="semana_scores_prev", use_container_width=True):
+                st.session_state.semana_scores_num = max(1, st.session_state.semana_scores_num - 1)
+        with col_der:
+            if st.button("▶", key="semana_scores_next", use_container_width=True):
+                st.session_state.semana_scores_num = min(18, st.session_state.semana_scores_num + 1)
+        week_scores = st.session_state.semana_scores_num
+        with col_centro:
+            st.markdown(_sin_sangria(f"""
+            <div style="text-align:center;">
+                <div style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:2rem;
+                     color:#F1F4F9; line-height:1;">WEEK {week_scores}</div>
+                <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.9rem;
+                     color:#BD4E1E; letter-spacing:0.08em; margin-top:2px;">RESULTADOS</div>
+            </div>
+            """), unsafe_allow_html=True)
 
     with st.spinner("Cargando resultados..."):
         try:
@@ -1546,7 +1561,7 @@ if st.session_state.pagina == "scores":
     if not partidos_semana:
         st.info("No se encontraron partidos para esta semana.")
     else:
-        st.markdown(tabla_semana_scores_html(week_scores, partidos_semana), unsafe_allow_html=True)
+        st.markdown(tabla_semana_scores_html(partidos_semana), unsafe_allow_html=True)
 
     st.stop()
 
