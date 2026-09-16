@@ -56,6 +56,9 @@ from comparador_nfl import (
     obtener_roster_equipo,
     _DIVISIONES_NFL,
     obtener_marcadores_api_sports,
+    obtener_semana_actual_api_sports,
+    obtener_marcadores_semana_api_sports,
+    obtener_marcadores_semana,
     logo_url,
     favorito_segun_mercado,
     comparar_equipos,
@@ -224,6 +227,7 @@ def inyectar_estilos():
     /* Selector de temporada (Standings) — angosto, del ancho de la palabra */
     div[class*="st-key-selector_temporada"] { max-width: 130px; }
     div[class*="st-key-selector_lesiones"] { max-width: 260px; margin-bottom: 10px; }
+    div[class*="st-key-selector_semana_scores"] { max-width: 130px; margin-bottom: 10px; }
 
     /* Todos los cuadros/casillas de información (contenedores con borde,
        métricas, tablas) del mismo gris que las tarjetas de noticias */
@@ -429,6 +433,7 @@ def marca_compacta():
 _SECCIONES_NAV = [
     ("inicio", "News"),
     ("estadisticas", "Standings"),
+    ("scores", "Scores"),
     ("lesiones", "Injuries"),
     ("pronosticos", "Predictions"),
     ("fantasy", "Fantasy"),
@@ -521,6 +526,23 @@ NOMBRES_COMPLETOS = {
     "NYJ": "New York Jets", "PHI": "Philadelphia Eagles", "PIT": "Pittsburgh Steelers", "SEA": "Seattle Seahawks",
     "SF": "San Francisco 49ers", "TB": "Tampa Bay Buccaneers", "TEN": "Tennessee Titans", "WAS": "Washington Commanders",
 }
+
+# Color primario de cada equipo — se usa como fondo de cada mitad de la
+# fila en la pantalla Scores (ver tabla_semana_scores_html), imitando el
+# gráfico de "resultados de la semana" estilo NFL.com/ESPN.
+_COLORES_EQUIPO = {
+    "ARI": "#97233F", "ATL": "#A71930", "BAL": "#241773", "BUF": "#00338D",
+    "CAR": "#0085CA", "CHI": "#0B162A", "CIN": "#FB4F14", "CLE": "#311D00",
+    "DAL": "#041E42", "DEN": "#FB4F14", "DET": "#0076B6", "GB": "#203731",
+    "HOU": "#03202F", "IND": "#002C5F", "JAX": "#101820", "KC": "#E31837",
+    "LA": "#003594", "LAC": "#0080C6", "LV": "#000000", "MIA": "#008E97",
+    "MIN": "#4F2683", "NE": "#0B162A", "NO": "#9F8958", "NYG": "#0B2265",
+    "NYJ": "#125740", "PHI": "#004C54", "PIT": "#FFB612", "SEA": "#002244",
+    "SF": "#AA0000", "TB": "#D50A0A", "TEN": "#4B92DB", "WAS": "#5A1414",
+}
+# Equipos cuyo color primario es muy claro — el texto/logo necesitan un
+# texto oscuro encima en vez de blanco para mantenerse legibles.
+_EQUIPOS_TEXTO_OSCURO = {"PIT"}
 
 
 def nombre_equipo(abbr: str) -> str:
@@ -926,6 +948,37 @@ def marcadores_cacheados(season: int, api_key: str = ""):
     ]
 
 
+@st.cache_data(show_spinner=False, ttl=300)
+def semana_actual_cacheada(season: int, api_key: str = "") -> int:
+    """Número de semana a preseleccionar en Scores — misma lógica de
+    corte (6am del día siguiente al último partido) que usa el ticker de
+    marcadores. Sin API-Sports, usa la próxima semana con partidos
+    pendientes como mejor estimado; si la temporada ya terminó, se queda
+    en la semana 18."""
+    if api_key:
+        try:
+            return obtener_semana_actual_api_sports(api_key, season)
+        except Exception:
+            pass
+    try:
+        return int(obtener_proximos_partidos(season)["week"].iloc[0])
+    except Exception:
+        return 18
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def marcadores_semana_cacheados(season: int, week: int, api_key: str = ""):
+    """Partidos (jugados o pendientes) de una semana ESPECÍFICA, para la
+    pantalla Scores. API-Sports si hay key (incluye estado en vivo); si
+    no, o si falla, respaldo con el calendario de nfl_data_py."""
+    if api_key:
+        try:
+            return obtener_marcadores_semana_api_sports(api_key, season, week)
+        except Exception:
+            pass
+    return obtener_marcadores_semana(season, week)
+
+
 def ejecutar_comparacion(stats, equipo_a, equipo_b, local, usar_clima, usar_odds):
     """Corre el modelo para un partido y devuelve (resultado, clima) —
     lógica compartida entre el modo individual y el modo semana completa."""
@@ -1016,6 +1069,76 @@ def mostrar_resultado(resultado, equipo_a, equipo_b, clima=None, local=None, com
 
         if clima:
             st.caption(f"Clima en {local}: {clima.get('temp_c', '?')}°C, viento {clima.get('viento_kmh', '?')} km/h")
+
+
+def _fila_score_semana(p: dict) -> str:
+    """Una fila de la pantalla Scores: mitad izquierda con el color del
+    equipo visitante, mitad derecha con el del local, marcador o
+    fecha/hora si el partido todavía no se juega, y "FINAL"/estado al
+    centro — mismo lenguaje visual que la referencia tipo NFL.com."""
+    away, home = p["away_abbr"], p["home_abbr"]
+    color_away = _COLORES_EQUIPO.get(away, "#22314A")
+    color_home = _COLORES_EQUIPO.get(home, "#22314A")
+    texto_away = "#14241A" if away in _EQUIPOS_TEXTO_OSCURO else "#FFFFFF"
+    texto_home = "#14241A" if home in _EQUIPOS_TEXTO_OSCURO else "#FFFFFF"
+
+    jugado = p["estado"] in ("FT", "AOT")
+    if jugado:
+        centro = "FINAL" if p["estado"] == "FT" else "FINAL (OT)"
+        score_away = p.get("away_score") if p.get("away_score") is not None else "-"
+        score_home = p.get("home_score") if p.get("home_score") is not None else "-"
+    elif p.get("en_vivo"):
+        centro = _texto_periodo_en_vivo(p)
+        score_away = p.get("away_score") if p.get("away_score") is not None else "-"
+        score_home = p.get("home_score") if p.get("home_score") is not None else "-"
+    else:
+        centro = _fecha_hora_local(p) or "Por jugarse"
+        score_away = "-"
+        score_home = "-"
+
+    return f"""
+    <div style="display:flex; align-items:stretch; border-radius:8px; overflow:hidden;
+         margin-bottom:10px; box-shadow:0 3px 8px rgba(0,0,0,0.4); min-height:58px;">
+        <div style="flex:1; background:{color_away}; display:flex; align-items:center; gap:10px;
+             padding:0 14px; min-width:0;">
+            <img src="{logo_url(away)}" style="width:34px; height:34px; object-fit:contain; flex-shrink:0;">
+            <span style="color:{texto_away}; font-weight:800; font-size:0.92rem; text-shadow:0 1px 2px rgba(0,0,0,0.45);
+                 flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                 text-transform:uppercase;">{NOMBRES_EQUIPO.get(away, away)}</span>
+            <span style="color:#FFD200; font-weight:800; font-size:1.3rem; flex-shrink:0;">{score_away}</span>
+        </div>
+        <div style="flex:0 0 auto; background:#0B0F14; color:#FFFFFF; font-weight:700; font-size:0.72rem;
+             display:flex; align-items:center; justify-content:center; padding:0 14px; text-align:center;
+             min-width:96px; white-space:normal; line-height:1.2;">{centro}</div>
+        <div style="flex:1; background:{color_home}; display:flex; align-items:center; gap:10px;
+             padding:0 14px; min-width:0; flex-direction:row-reverse;">
+            <img src="{logo_url(home)}" style="width:34px; height:34px; object-fit:contain; flex-shrink:0;">
+            <span style="color:{texto_home}; font-weight:800; font-size:0.92rem; text-shadow:0 1px 2px rgba(0,0,0,0.45);
+                 flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right;
+                 text-transform:uppercase;">{NOMBRES_EQUIPO.get(home, home)}</span>
+            <span style="color:#FFD200; font-weight:800; font-size:1.3rem; flex-shrink:0;">{score_home}</span>
+        </div>
+    </div>"""
+
+
+def tabla_semana_scores_html(week: int, partidos: list) -> str:
+    """Bloque completo de la pantalla Scores para una semana: encabezado
+    tipo "WEEK N" + una fila por partido (ver _fila_score_semana)."""
+    filas = "".join(_fila_score_semana(p) for p in partidos)
+    return _sin_sangria(f"""
+    <div style="background:#000000; border-radius:14px; padding:20px 20px 8px 20px; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom:18px;">
+            <img src="{LOGO_ESCUDO_URL}" width="46">
+            <div>
+                <div style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:2rem;
+                     color:#FFFFFF; line-height:1;">WEEK {week}</div>
+                <div style="font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.9rem;
+                     color:#BD4E1E; letter-spacing:0.08em; margin-top:2px;">RESULTADOS</div>
+            </div>
+        </div>
+        {filas}
+    </div>
+    """)
 
 
 # ============================================================
@@ -1383,6 +1506,44 @@ if st.session_state.pagina == "lesiones":
                 </div>
                 </a>"""
             st.markdown(_sin_sangria(f'<div>{filas_noticias}</div>'), unsafe_allow_html=True)
+
+    st.stop()
+
+
+# ============================================================
+# PANTALLA: SCORES — resultados (o calendario, si no se han jugado) de
+# la semana que el usuario elija, con diseño tipo "resumen semanal" de
+# marcadores finales.
+# ============================================================
+if st.session_state.pagina == "scores":
+    encabezado_sitio("scores")
+    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Scores</span>')
+
+    season_scores = _temporada_nfl_actual()
+
+    try:
+        semana_default = semana_actual_cacheada(season_scores, API_SPORTS_KEY)
+    except Exception:
+        semana_default = 1
+    semana_default = min(max(int(semana_default), 1), 18)
+
+    with st.container(key="selector_semana_scores"):
+        week_scores = st.selectbox(
+            "Semana", list(range(1, 19)), index=semana_default - 1,
+            key="semana_scores", label_visibility="collapsed",
+        )
+
+    with st.spinner("Cargando resultados..."):
+        try:
+            partidos_semana = marcadores_semana_cacheados(season_scores, week_scores, API_SPORTS_KEY)
+        except Exception as e:
+            partidos_semana = []
+            st.error(f"No se pudieron cargar los resultados de la semana {week_scores}: {e}")
+
+    if not partidos_semana:
+        st.info("No se encontraron partidos para esta semana.")
+    else:
+        st.markdown(tabla_semana_scores_html(week_scores, partidos_semana), unsafe_allow_html=True)
 
     st.stop()
 

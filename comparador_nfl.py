@@ -35,6 +35,7 @@ import pandas as pd
 import requests
 import json
 import feedparser
+from zoneinfo import ZoneInfo
 
 try:
     import nfl_data_py as nfl
@@ -814,6 +815,11 @@ def obtener_marcadores_actuales() -> list:
 API_SPORTS_BASE_URL = "https://v1.american-football.api-sports.io"
 API_SPORTS_LEAGUE_NFL = 1
 
+# Zona horaria usada para decidir cuándo una jornada deja de mostrarse como
+# "actual" (ver _semana_actual_por_corte) — la misma que usa el resto de la
+# app para mostrar horarios locales (America/Cancun).
+ZONA_CORTE_SEMANA = "America/Cancun"
+
 # Apodo de cada equipo, usado para cruzar el nombre completo que devuelve
 # API-Sports (ej. "Kansas City Chiefs") con nuestra abreviatura (KC) sin
 # depender de que sus códigos de equipo coincidan con los de nflverse.
@@ -908,12 +914,107 @@ def obtener_equipos_api_sports(api_key: str, season: int) -> dict:
     return mapeo
 
 
+def _juegos_temporada_regular_api_sports(api_key: str, season: int) -> list:
+    """Trae TODOS los juegos de temporada regular de la temporada (1 sola
+    consulta), sin filtrar todavía por semana — usado tanto para detectar
+    la semana 'actual' como para traer una semana puntual en Scores."""
+    data = _api_sports_get(api_key, "/games", {"league": API_SPORTS_LEAGUE_NFL, "season": season})
+    juegos = data.get("response", [])
+    # Solo temporada regular — descarta pretemporada (por eso salían
+    # combinaciones raras de equipos con "Final" fuera de lugar).
+    return [j for j in juegos if "regular" in ((j.get("game") or {}).get("stage") or "").lower()]
+
+
+def _fecha_juego_api_sports(j: dict, respaldo: datetime.date = None) -> datetime.date:
+    """Fecha (solo día) del juego, a partir del campo crudo de API-Sports."""
+    try:
+        return datetime.date.fromisoformat(j["game"]["date"]["date"])
+    except Exception:
+        return respaldo or datetime.date.today()
+
+
+def _semanas_min_max(juegos: list) -> dict:
+    """{numero_semana: {"min": date, "max": date}} — el rango de fechas
+    (primer y último partido) de cada jornada, a partir de la lista cruda
+    de juegos de API-Sports (ya filtrada a temporada regular)."""
+    semanas = {}
+    for j in juegos:
+        semana = (j.get("game") or {}).get("week")
+        f = _fecha_juego_api_sports(j)
+        if semana not in semanas:
+            semanas[semana] = {"min": f, "max": f}
+        else:
+            semanas[semana]["min"] = min(semanas[semana]["min"], f)
+            semanas[semana]["max"] = max(semanas[semana]["max"], f)
+    return semanas
+
+
+def _semana_actual_por_corte(semanas: dict, ahora: datetime.datetime) -> int:
+    """
+    La jornada 'actual' es la primera (en orden cronológico) cuyo CORTE
+    todavía no se ha cumplido. El corte de una jornada son las 6:00 am
+    (hora de ZONA_CORTE_SEMANA) del día siguiente a la fecha de su ÚLTIMO
+    partido — antes de ese momento se sigue mostrando esa jornada (aunque
+    ya hayan terminado todos sus partidos); justo al llegar el corte, se
+    salta automáticamente a la siguiente jornada con sus propios partidos
+    y horarios. Si ya se cumplió el corte de todas las jornadas conocidas,
+    se queda en la última (temporada terminada / nada más que mostrar).
+    """
+    orden = sorted(semanas.keys(), key=lambda s: semanas[s]["min"])
+    if not orden:
+        raise ValueError("No hay semanas para evaluar.")
+
+    semana_actual = orden[-1]
+    for semana in orden:
+        corte = datetime.datetime.combine(
+            semanas[semana]["max"] + datetime.timedelta(days=1),
+            datetime.time(6, 0),
+            tzinfo=ahora.tzinfo,
+        )
+        if ahora < corte:
+            semana_actual = semana
+            break
+    return semana_actual
+
+
+def _formatear_partido_api_sports(j: dict) -> dict:
+    """Normaliza un juego crudo de API-Sports (/games) a nuestro formato
+    común de partido — compartido entre el ticker de la semana 'actual' y
+    la pantalla Scores (que pide una semana puntual)."""
+    home = (j.get("teams") or {}).get("home") or {}
+    away = (j.get("teams") or {}).get("away") or {}
+    scores = j.get("scores") or {}
+    status_obj = (j.get("game") or {}).get("status") or {}
+    estado = status_obj.get("short", "NS")
+    venue = (j.get("game") or {}).get("venue") or {}
+    # El nombre del campo del reloj en vivo varía entre proveedores —
+    # se intentan las variantes más comunes en vez de asumir una sola.
+    reloj = status_obj.get("timer") or status_obj.get("clock") or ""
+    return {
+        "away_abbr": _abbr_desde_nombre_api_sports(away.get("name", "")),
+        "home_abbr": _abbr_desde_nombre_api_sports(home.get("name", "")),
+        "away_score": (scores.get("away") or {}).get("total"),
+        "home_score": (scores.get("home") or {}).get("total"),
+        "estado": estado,
+        "en_vivo": estado in _CODIGOS_EN_VIVO,
+        "periodo": estado,
+        "reloj": reloj,
+        "fecha": (j.get("game") or {}).get("date", {}).get("date", ""),
+        "hora": (j.get("game") or {}).get("date", {}).get("time", ""),
+        "timestamp": (j.get("game") or {}).get("date", {}).get("timestamp"),
+        "estadio": venue.get("name", ""),
+        "ciudad": venue.get("city", ""),
+        "semana": (j.get("game") or {}).get("week"),
+    }
+
+
 def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
     """
     Marcadores de la jornada (semana) actual vía API-Sports. Se queda en
-    una jornada hasta UN DÍA DESPUÉS de su último partido — al día
-    siguiente de ese margen, salta sola a la próxima jornada. Trae toda
-    la temporada en 1 sola consulta y filtra en memoria, para no gastar
+    una jornada hasta las 6:00 am (hora de America/Cancun) del día
+    siguiente a su último partido — justo en ese momento salta sola a la
+    próxima jornada, con sus propios partidos y horarios. Trae toda la
+    temporada en 1 sola consulta y filtra en memoria, para no gastar
     cuota pidiendo semana por semana.
 
     Si un partido está en vivo, incluye también el cuarto/periodo
@@ -921,47 +1022,13 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
     API lo trae, para poder mostrar el minuto del partido en vez de la
     hora programada y el estadio.
     """
-    data = _api_sports_get(api_key, "/games", {"league": API_SPORTS_LEAGUE_NFL, "season": season})
-    juegos = data.get("response", [])
-    # Solo temporada regular — descarta pretemporada (por eso salían
-    # combinaciones raras de equipos con "Final" fuera de lugar).
-    juegos = [j for j in juegos if "regular" in ((j.get("game") or {}).get("stage") or "").lower()]
+    juegos = _juegos_temporada_regular_api_sports(api_key, season)
     if not juegos:
         return []
 
-    hoy = datetime.date.today()
-
-    def _fecha(j):
-        try:
-            return datetime.date.fromisoformat(j["game"]["date"]["date"])
-        except Exception:
-            return hoy
-
-    # Rango de fechas (primer y último partido) de cada jornada.
-    semanas = {}
-    for j in juegos:
-        semana = (j.get("game") or {}).get("week")
-        f = _fecha(j)
-        if semana not in semanas:
-            semanas[semana] = {"min": f, "max": f}
-        else:
-            semanas[semana]["min"] = min(semanas[semana]["min"], f)
-            semanas[semana]["max"] = max(semanas[semana]["max"], f)
-
-    # Semanas en orden cronológico (por su fecha de inicio).
-    orden_semanas = sorted(semanas.keys(), key=lambda s: semanas[s]["min"])
-    if not orden_semanas:
-        return []
-
-    # La jornada actual es la primera (en orden) cuyo margen de un día
-    # después de su último partido todavía no se cumple. Si ya pasaron
-    # todas, se queda en la última (temporada terminada).
-    semana_actual = orden_semanas[-1]
-    for semana in orden_semanas:
-        limite_con_gracia = semanas[semana]["max"] + datetime.timedelta(days=1)
-        if hoy <= limite_con_gracia:
-            semana_actual = semana
-            break
+    ahora = datetime.datetime.now(ZoneInfo(ZONA_CORTE_SEMANA))
+    semanas = _semanas_min_max(juegos)
+    semana_actual = _semana_actual_por_corte(semanas, ahora)
 
     de_esta_semana = [j for j in juegos if (j.get("game") or {}).get("week") == semana_actual]
 
@@ -971,107 +1038,80 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
 
     # Primero los que faltan por jugar (en orden cronológico), y hasta el
     # final los que ya terminaron.
-    de_esta_semana.sort(key=lambda j: (_terminado(j), _fecha(j)))
+    de_esta_semana.sort(key=lambda j: (_terminado(j), _fecha_juego_api_sports(j, ahora.date())))
+
+    return [_formatear_partido_api_sports(j) for j in de_esta_semana]
+
+
+def obtener_semana_actual_api_sports(api_key: str, season: int) -> int:
+    """Número de la jornada que se considera 'actual' ahora mismo (misma
+    lógica de corte de las 6am que usa el ticker de marcadores) — se usa
+    para preseleccionar la semana en la pantalla Scores."""
+    juegos = _juegos_temporada_regular_api_sports(api_key, season)
+    if not juegos:
+        raise ValueError(f"No hay partidos de temporada regular para {season} todavía.")
+    ahora = datetime.datetime.now(ZoneInfo(ZONA_CORTE_SEMANA))
+    semanas = _semanas_min_max(juegos)
+    return _semana_actual_por_corte(semanas, ahora)
+
+
+def obtener_marcadores_semana_api_sports(api_key: str, season: int, week: int) -> list:
+    """
+    Partidos (ya jugados, en vivo, o pendientes) de una semana ESPECÍFICA
+    vía API-Sports — a diferencia de obtener_marcadores_api_sports(), no
+    detecta ninguna semana "actual": trae exactamente la que se le pida.
+    Se usa en la pantalla Scores, donde el usuario elige la semana con un
+    selector. Si la semana todavía no se jugó, los partidos vienen con
+    estado "NS" (Not Started) y sin marcador.
+    """
+    juegos = _juegos_temporada_regular_api_sports(api_key, season)
+    de_la_semana = [j for j in juegos if (j.get("game") or {}).get("week") == week]
+    if not de_la_semana:
+        return []
+
+    de_la_semana.sort(key=lambda j: _fecha_juego_api_sports(j))
+    return [_formatear_partido_api_sports(j) for j in de_la_semana]
+
+
+def obtener_marcadores_semana(season: int, week: int) -> list:
+    """
+    Respaldo SIN API-Sports para la pantalla Scores — usa el calendario de
+    nfl_data_py, que ya trae el marcador final de cada partido una vez
+    jugado (y NaN si todavía no se juega). No incluye estado en vivo (esa
+    granularidad solo la dan ESPN/API-Sports), pero alcanza para ver
+    resultados de semanas pasadas o el calendario de una semana futura.
+    """
+    if not NFL_DATA_PY_OK:
+        raise RuntimeError("nfl_data_py no disponible")
+
+    sched = nfl.import_schedules([season])
+    if sched is None or sched.empty:
+        raise ValueError(f"No hay calendario disponible todavía para la temporada {season}.")
+
+    partidos = sched[sched["week"] == week]
+    if partidos.empty:
+        raise ValueError(f"No se encontraron partidos para la semana {week} de la temporada {season}.")
 
     resultado = []
-    for j in de_esta_semana:
-        home = (j.get("teams") or {}).get("home") or {}
-        away = (j.get("teams") or {}).get("away") or {}
-        scores = j.get("scores") or {}
-        status_obj = (j.get("game") or {}).get("status") or {}
-        estado = status_obj.get("short", "NS")
-        venue = (j.get("game") or {}).get("venue") or {}
-        # El nombre del campo del reloj en vivo varía entre proveedores —
-        # se intentan las variantes más comunes en vez de asumir una sola.
-        reloj = status_obj.get("timer") or status_obj.get("clock") or ""
+    for _, p in partidos.iterrows():
+        jugado = pd.notna(p.get("home_score")) and pd.notna(p.get("away_score"))
         resultado.append({
-            "away_abbr": _abbr_desde_nombre_api_sports(away.get("name", "")),
-            "home_abbr": _abbr_desde_nombre_api_sports(home.get("name", "")),
-            "away_score": (scores.get("away") or {}).get("total"),
-            "home_score": (scores.get("home") or {}).get("total"),
-            "estado": estado,
-            "en_vivo": estado in _CODIGOS_EN_VIVO,
-            "periodo": estado,
-            "reloj": reloj,
-            "fecha": (j.get("game") or {}).get("date", {}).get("date", ""),
-            "hora": (j.get("game") or {}).get("date", {}).get("time", ""),
-            "timestamp": (j.get("game") or {}).get("date", {}).get("timestamp"),
-            "estadio": venue.get("name", ""),
-            "ciudad": venue.get("city", ""),
+            "away_abbr": p["away_team"],
+            "home_abbr": p["home_team"],
+            "away_score": int(p["away_score"]) if jugado else None,
+            "home_score": int(p["home_score"]) if jugado else None,
+            "estado": "FT" if jugado else "NS",
+            "en_vivo": False,
+            "periodo": None,
+            "reloj": "",
+            "fecha": p.get("gameday", ""),
+            "hora": p.get("gametime", ""),
+            "timestamp": None,
+            "estadio": "",
+            "ciudad": "",
+            "semana": week,
         })
     return resultado
-
-
-def _lesiones_equipo_api_sports_raw(api_key: str, team_id, abbr: str) -> list:
-    """Lesiones de UN equipo directo desde API-Sports (sin combinar con
-    otros equipos ni recortar por fecha) — se usa tanto para el listado
-    de toda la liga como para el filtro por equipo específico, así
-    ambos usan la misma fuente confiable sin que un equipo con lesiones
-    'menos recientes' que las de otros quede fuera al truncar.
-
-    Filtra las entradas que son 'Coach's Decision' (jugador sano, fuera
-    por decisión técnica/estrategia) — no es una lesión ni una
-    suspensión, así que no debe aparecer en el reporte de lesiones."""
-    data = _api_sports_get(api_key, "/injuries", {"team": team_id})
-    filas = []
-    for lesion in data.get("response", []):
-        descripcion = lesion.get("description", "") or ""
-        if "coach's decision" in descripcion.lower() or "coaches decision" in descripcion.lower():
-            continue
-        jugador = lesion.get("player") or {}
-        filas.append({
-            "equipo": abbr,
-            "jugador": jugador.get("name", "?"),
-            "posicion": jugador.get("position", "") or jugador.get("pos", "") or "",
-            "foto": jugador.get("photo", "") or jugador.get("image", "") or "",
-            "estado": lesion.get("status", "?"),
-            "detalle": descripcion,
-            "fecha": lesion.get("date", "") or "",
-        })
-    return filas
-
-
-def obtener_lesiones_equipo_api_sports(api_key: str, season: int, team_abbr: str) -> list:
-    """Lesiones de un solo equipo específico, vía API-Sports — no pasa
-    por el recorte de 'toda la liga', así que no se pierde ningún
-    jugador de ese equipo aunque otros equipos tengan lesiones más
-    recientes."""
-    equipos = obtener_equipos_api_sports(api_key, season)
-    if not equipos or team_abbr not in equipos:
-        raise ValueError(f"No se encontró el equipo {team_abbr} en el catálogo de API-Sports.")
-    team_id = equipos[team_abbr]
-    filas = _lesiones_equipo_api_sports_raw(api_key, team_id, team_abbr)
-    filas.sort(key=lambda x: x.get("fecha") or "", reverse=True)
-    return filas
-
-
-def obtener_lesiones_liga_api_sports(api_key: str, season: int, limite: int = 30) -> list:
-    """
-    Lesiones recientes de toda la liga vía API-Sports (más confiable que
-    scrapear ESPN equipo por equipo). Consume 1 request por equipo (32
-    en total) más 1 para el catálogo de equipos — cuidado con el límite
-    diario en el plan gratuito (100/día).
-    """
-    import concurrent.futures
-
-    equipos = obtener_equipos_api_sports(api_key, season)
-    if not equipos:
-        raise ValueError("No se pudo obtener el catálogo de equipos de API-Sports.")
-
-    def _lesiones_de_equipo(item):
-        abbr, team_id = item
-        try:
-            return _lesiones_equipo_api_sports_raw(api_key, team_id, abbr)
-        except Exception:
-            return []
-
-    resultado = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        for filas in executor.map(_lesiones_de_equipo, equipos.items()):
-            resultado.extend(filas)
-
-    resultado.sort(key=lambda x: x.get("fecha") or "", reverse=True)
-    return resultado[:limite]
 
 
 _DIVISIONES_NFL = {
