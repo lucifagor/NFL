@@ -785,9 +785,9 @@ def _titulo_columna_bracket_html(texto: str, color: str) -> str:
     (Wild Card, Divisional, Campeón) comparten el mismo color y el
     mismo estilo de cuadro, en vez de solo texto de color suelto."""
     return f"""
-    <div style="border:1.5px solid {color}; border-radius:6px; padding:4px 4px; margin-bottom:6px;
-         background:#1A2318; color:{color}; font-family:'Barlow Condensed',sans-serif; font-weight:800;
-         font-size:0.52rem; text-align:center; white-space:nowrap; letter-spacing:0.02em;">{texto}</div>"""
+    <div style="border:2px solid {color}; border-radius:8px; padding:6px 6px; margin-bottom:8px;
+         background:#FFFFFF; color:{color}; font-family:'Barlow Condensed',sans-serif; font-weight:800;
+         font-size:0.72rem; text-align:center; white-space:nowrap; letter-spacing:0.02em;">{texto}</div>"""
 
 
 def _caja_bracket_html(item: dict = None, color_borde: str = "#8B9187", vacio_texto: str = "") -> str:
@@ -797,8 +797,8 @@ def _caja_bracket_html(item: dict = None, color_borde: str = "#8B9187", vacio_te
     define."""
     if item is None:
         return f"""
-        <div style="background:#1A2318; border:1.5px dashed #33452F; border-radius:8px; height:36px;
-             display:flex; align-items:center; justify-content:center; color:#5C6B57; font-size:0.5rem;
+        <div style="background:#F1F3EF; border:2px dashed #C9CDC5; border-radius:10px; height:56px;
+             display:flex; align-items:center; justify-content:center; color:#5C6B57; font-size:0.62rem;
              font-family:'Barlow Condensed',sans-serif; letter-spacing:0.05em; text-transform:uppercase;">{vacio_texto}</div>"""
 
     es_division = item.get("tipo") == "División"
@@ -807,15 +807,15 @@ def _caja_bracket_html(item: dict = None, color_borde: str = "#8B9187", vacio_te
     texto_etiqueta = "#FFFFFF" if es_division else color_borde
 
     return f"""
-    <div style="background:#FFFFFF; border:1.5px solid {color_borde}; border-radius:8px; height:36px;
-         display:flex; align-items:center; gap:6px; padding:0 8px;">
-        <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:0.8rem;
-             color:{color_borde}; width:14px; text-align:center; flex-shrink:0;">{item['seed']}</span>
-        <img src="{logo_url(item['equipo'])}" style="width:22px; height:22px; object-fit:contain; flex-shrink:0;">
-        <span style="color:#14241A; font-weight:800; font-size:0.68rem; text-transform:uppercase; white-space:nowrap;
+    <div style="background:#FFFFFF; border:2px solid {color_borde}; border-radius:10px; height:56px;
+         display:flex; align-items:center; gap:7px; padding:0 10px;">
+        <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.15rem;
+             color:{color_borde}; width:20px; text-align:center; flex-shrink:0;">{item['seed']}</span>
+        <img src="{logo_url(item['equipo'])}" style="width:34px; height:34px; object-fit:contain; flex-shrink:0;">
+        <span style="color:#14241A; font-weight:800; font-size:0.95rem; text-transform:uppercase; white-space:nowrap;
              overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0;">{item['equipo']}</span>
         <span style="background:{fondo_etiqueta}; color:{texto_etiqueta}; border:1px solid {color_borde};
-             border-radius:4px; font-size:0.48rem; font-weight:800; padding:2px 4px; flex-shrink:0;
+             border-radius:5px; font-size:0.64rem; font-weight:800; padding:3px 5px; flex-shrink:0;
              font-family:'Barlow Condensed',sans-serif; letter-spacing:0.03em;">{etiqueta}</span>
     </div>"""
 
@@ -835,58 +835,58 @@ def bracket_visual_html(picture: dict) -> str:
         for a, b in [(2, 7), (3, 6), (4, 5)]:
             cajas.append(_caja_bracket_html(mapa.get(a), color))
             cajas.append(_caja_bracket_html(mapa.get(b), color))
-        return "".join(f'<div style="margin-bottom:6px;">{c}</div>' for c in cajas)
+        return "".join(f'<div style="margin-bottom:9px;">{c}</div>' for c in cajas)
 
     def _columna_vacia(n, alto_extra=0):
         return "".join(
-            f'<div style="margin-bottom:{4 + alto_extra}px;">{_caja_bracket_html(None, vacio_texto="POR DEFINIR")}</div>'
+            f'<div style="margin-bottom:{6 + alto_extra}px;">{_caja_bracket_html(None, vacio_texto="POR DEFINIR")}</div>'
             for _ in range(n)
         )
 
     COLOR_SB = "#BD4E1E"
 
     return _sin_sangria(f"""
-    <div style="background:#0E140C; border-radius:12px; padding:14px; margin-bottom:20px; overflow-x:auto;">
-        <div style="display:flex; gap:8px; min-width:710px; align-items:stretch; justify-content:center;">
-            <div style="width:132px;">
+    <div style="background:#FFFFFF; border-radius:12px; padding:16px; margin-bottom:20px; overflow-x:auto;">
+        <div style="display:flex; gap:12px; min-width:1080px; align-items:stretch; justify-content:center;">
+            <div style="width:210px;">
                 {_titulo_columna_bracket_html("AFC · WILD CARD", COLOR_AFC)}
                 {_columna_wc(afc, COLOR_AFC)}
             </div>
-            <div style="width:78px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="width:110px; display:flex; flex-direction:column; justify-content:center;">
                 {_titulo_columna_bracket_html("DIVISIONAL", COLOR_AFC)}
-                {_columna_vacia(2, alto_extra=34)}
+                {_columna_vacia(2, alto_extra=48)}
             </div>
-            <div style="width:72px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="width:110px; display:flex; flex-direction:column; justify-content:center;">
                 {_titulo_columna_bracket_html("CAMPEÓN AFC", COLOR_AFC)}
                 {_columna_vacia(1)}
             </div>
-            <div style="width:72px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+            <div style="width:110px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
                 {_titulo_columna_bracket_html("SUPER BOWL", COLOR_SB)}
-                <img src="{LOGO_SUPER_BOWL_URL}" style="width:34px; height:34px; object-fit:contain; margin-top:2px;">
+                <img src="{LOGO_SUPER_BOWL_URL}" style="width:48px; height:48px; object-fit:contain; margin-top:4px;">
             </div>
-            <div style="width:72px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="width:110px; display:flex; flex-direction:column; justify-content:center;">
                 {_titulo_columna_bracket_html("CAMPEÓN NFC", COLOR_NFC)}
                 {_columna_vacia(1)}
             </div>
-            <div style="width:78px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="width:110px; display:flex; flex-direction:column; justify-content:center;">
                 {_titulo_columna_bracket_html("DIVISIONAL", COLOR_NFC)}
-                {_columna_vacia(2, alto_extra=34)}
+                {_columna_vacia(2, alto_extra=48)}
             </div>
-            <div style="width:132px;">
+            <div style="width:210px;">
                 {_titulo_columna_bracket_html("NFC · WILD CARD", COLOR_NFC)}
                 {_columna_wc(nfc, COLOR_NFC)}
             </div>
         </div>
-        <div style="display:flex; justify-content:center; gap:14px; margin-top:12px;">
-            <span style="display:flex; align-items:center; gap:5px; color:#C9CDC5; font-size:0.6rem;
+        <div style="display:flex; justify-content:center; gap:16px; margin-top:14px;">
+            <span style="display:flex; align-items:center; gap:6px; color:#5C6B57; font-size:0.72rem;
                  font-family:'Barlow Condensed',sans-serif;">
-                <span style="background:#8B9187; color:#FFFFFF; border-radius:4px; font-size:0.48rem; font-weight:800;
-                     padding:2px 4px;">DIV</span> Campeón de división
+                <span style="background:#8B9187; color:#FFFFFF; border-radius:4px; font-size:0.58rem; font-weight:800;
+                     padding:3px 5px;">DIV</span> Campeón de división
             </span>
-            <span style="display:flex; align-items:center; gap:5px; color:#C9CDC5; font-size:0.6rem;
+            <span style="display:flex; align-items:center; gap:6px; color:#5C6B57; font-size:0.72rem;
                  font-family:'Barlow Condensed',sans-serif;">
                 <span style="background:#FFFFFF; color:#8B9187; border:1px solid #8B9187; border-radius:4px;
-                     font-size:0.48rem; font-weight:800; padding:2px 4px;">WC</span> Wild Card
+                     font-size:0.58rem; font-weight:800; padding:3px 5px;">WC</span> Wild Card
             </span>
         </div>
     </div>
