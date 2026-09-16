@@ -779,14 +779,18 @@ def calcular_playoff_picture(standings: pd.DataFrame) -> dict:
     return resultado
 
 
-def _titulo_columna_bracket_html(texto: str, color: str) -> str:
+def _titulo_columna_bracket_html(texto: str, color: str, relleno: bool = False) -> str:
     """Encabezado de una columna del bracket, enmarcado en un cuadro del
     color de la conferencia — todas las columnas de un mismo lado
     (Wild Card, Divisional, Campeón) comparten el mismo color y el
-    mismo estilo de cuadro, en vez de solo texto de color suelto."""
+    mismo estilo de cuadro, en vez de solo texto de color suelto.
+    Con relleno=True el cuadro se pinta por completo del color (texto
+    en blanco) en vez de solo llevar el borde — usado para AFC/NFC."""
+    fondo = color if relleno else "#FFFFFF"
+    texto_color = "#FFFFFF" if relleno else color
     return f"""
     <div style="border:2px solid {color}; border-radius:8px; padding:6px 6px; margin-bottom:8px;
-         background:#FFFFFF; color:{color}; font-family:'Barlow Condensed',sans-serif; font-weight:800;
+         background:{fondo}; color:{texto_color}; font-family:'Barlow Condensed',sans-serif; font-weight:800;
          font-size:0.72rem; text-align:center; white-space:nowrap; letter-spacing:0.02em;">{texto}</div>"""
 
 
@@ -849,7 +853,7 @@ def bracket_visual_html(picture: dict) -> str:
     <div style="background:#FFFFFF; border-radius:12px; padding:16px; margin-bottom:20px; overflow-x:auto;">
         <div style="display:flex; gap:12px; min-width:1080px; align-items:stretch; justify-content:center;">
             <div style="width:210px;">
-                {_titulo_columna_bracket_html("AFC · WILD CARD", COLOR_AFC)}
+                {_titulo_columna_bracket_html("AFC", COLOR_AFC, relleno=True)}
                 {_columna_wc(afc, COLOR_AFC)}
             </div>
             <div style="width:110px; display:flex; flex-direction:column; justify-content:center;">
@@ -873,7 +877,7 @@ def bracket_visual_html(picture: dict) -> str:
                 {_columna_vacia(2, alto_extra=48)}
             </div>
             <div style="width:210px;">
-                {_titulo_columna_bracket_html("NFC · WILD CARD", COLOR_NFC)}
+                {_titulo_columna_bracket_html("NFC", COLOR_NFC, relleno=True)}
                 {_columna_wc(nfc, COLOR_NFC)}
             </div>
         </div>
