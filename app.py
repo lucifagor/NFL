@@ -716,6 +716,208 @@ def tabla_conferencia_agregada_html(nombre_conferencia: str, filas_division: pd.
     """)
 
 
+def calcular_playoff_picture(standings: pd.DataFrame) -> dict:
+    """A partir de la tabla de posiciones actual, arma el 'playoff
+    picture' de cada conferencia: los 4 líderes de división (seeds 1-4,
+    ordenados por % de victorias) y los 3 mejores comodines restantes
+    (seeds 5-7), más el primer equipo que se queda fuera de la foto.
+    Se recalcula cada vez que se llama — así se va moviendo solo
+    conforme se juegan más partidos, sin que haya que tocar nada.
+
+    Desempate simplificado: % de victorias y, si empatan, diferencial
+    de puntos (PF-PC). No son los criterios de desempate oficiales
+    completos de la NFL (que incluyen resultado entre los propios
+    equipos, récord divisional/de conferencia, etc.), así que en casos
+    muy cerrados el orden real de la liga puede diferir un poco."""
+    resultado = {}
+    for conf in ("AFC", "NFC"):
+        conf_df = standings[standings["Conferencia"] == conf].copy()
+        if conf_df.empty:
+            resultado[conf] = {"clasificados": [], "primer_fuera": None}
+            continue
+
+        conf_df["_diff"] = conf_df["PF"] - conf_df["PC"]
+        conf_df = conf_df.sort_values(["% Victorias", "_diff"], ascending=[False, False]).reset_index(drop=True)
+
+        lideres = conf_df.groupby("División", sort=False).head(1)
+        lideres = lideres.sort_values(["% Victorias", "_diff"], ascending=[False, False]).reset_index(drop=True)
+
+        resto = conf_df[~conf_df["Equipo"].isin(lideres["Equipo"])].reset_index(drop=True)
+        comodines = resto.head(3)
+        primer_fuera = resto.iloc[3] if len(resto) > 3 else None
+
+        def _registro(fila):
+            txt = f"{int(fila['V'])}-{int(fila['D'])}"
+            if fila.get("E", 0):
+                txt += f"-{int(fila['E'])}"
+            return txt
+
+        clasificados = []
+        for i, fila in lideres.iterrows():
+            clasificados.append({
+                "seed": i + 1, "equipo": fila["Equipo"], "tipo": "División",
+                "division": fila["División"], "registro": _registro(fila),
+            })
+        for i, fila in comodines.iterrows():
+            clasificados.append({
+                "seed": len(lideres) + i + 1, "equipo": fila["Equipo"], "tipo": "Wild Card",
+                "division": fila["División"], "registro": _registro(fila),
+            })
+
+        resultado[conf] = {
+            "clasificados": clasificados,
+            "primer_fuera": (
+                {"equipo": primer_fuera["Equipo"], "division": primer_fuera["División"], "registro": _registro(primer_fuera)}
+                if primer_fuera is not None else None
+            ),
+        }
+    return resultado
+
+
+def _caja_bracket_html(item: dict = None, color_borde: str = "#8B9187", vacio_texto: str = "") -> str:
+    """Una casilla de la gráfica de bracket: con equipo (seed + logo) si
+    ya se conoce, o vacía/punteada si esa ronda todavía no se define."""
+    if item is None:
+        return f"""
+        <div style="background:#1A2318; border:1.5px dashed #33452F; border-radius:8px; height:40px;
+             display:flex; align-items:center; justify-content:center; color:#5C6B57; font-size:0.58rem;
+             font-family:'Barlow Condensed',sans-serif; letter-spacing:0.05em; text-transform:uppercase;">{vacio_texto}</div>"""
+    return f"""
+    <div style="background:#FFFFFF; border:1.5px solid {color_borde}; border-radius:8px; height:40px;
+         display:flex; align-items:center; gap:8px; padding:0 10px;">
+        <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:0.9rem;
+             color:{color_borde}; width:16px; text-align:center; flex-shrink:0;">{item['seed']}</span>
+        <img src="{logo_url(item['equipo'])}" style="width:22px; height:22px; object-fit:contain; flex-shrink:0;">
+        <span style="color:#14241A; font-weight:700; font-size:0.68rem; text-transform:uppercase; white-space:nowrap;
+             overflow:hidden; text-overflow:ellipsis;">{item['equipo']}</span>
+    </div>"""
+
+
+def bracket_visual_html(picture: dict) -> str:
+    """Gráfica tipo 'bracket' de playoffs: ronda de Wild Card con los 7
+    clasificados de cada conferencia (el 1 con 'bye') y casillas vacías
+    para las rondas siguientes (Divisional, Campeón de Conferencia y
+    Super Bowl), que se van llenando solas conforme avanza la
+    postemporada real."""
+    afc = {c["seed"]: c for c in picture.get("AFC", {}).get("clasificados", [])}
+    nfc = {c["seed"]: c for c in picture.get("NFC", {}).get("clasificados", [])}
+    COLOR_AFC, COLOR_NFC = "#C8102E", "#1D4E8F"
+
+    def _columna_wc(mapa, color):
+        cajas = [_caja_bracket_html(mapa.get(1), color)]
+        for a, b in [(2, 7), (3, 6), (4, 5)]:
+            cajas.append(_caja_bracket_html(mapa.get(a), color))
+            cajas.append(_caja_bracket_html(mapa.get(b), color))
+        return "".join(f'<div style="margin-bottom:6px;">{c}</div>' for c in cajas)
+
+    def _columna_vacia(n, alto_extra=0):
+        return "".join(
+            f'<div style="margin-bottom:{6 + alto_extra}px;">{_caja_bracket_html(None, vacio_texto="POR DEFINIR")}</div>'
+            for _ in range(n)
+        )
+
+    return _sin_sangria(f"""
+    <div style="background:#0E140C; border-radius:14px; padding:18px; margin-bottom:20px; overflow-x:auto;">
+        <div style="display:flex; gap:10px; min-width:760px; align-items:stretch; justify-content:center;">
+            <div style="width:150px;">
+                <div style="color:{COLOR_AFC}; font-family:'Barlow Condensed',sans-serif; font-weight:800;
+                     font-size:0.8rem; text-align:center; margin-bottom:8px;">AFC · WILD CARD</div>
+                {_columna_wc(afc, COLOR_AFC)}
+            </div>
+            <div style="width:120px; display:flex; flex-direction:column; justify-content:center;">
+                <div style="color:#8B9187; font-family:'Barlow Condensed',sans-serif; font-weight:700;
+                     font-size:0.7rem; text-align:center; margin-bottom:8px;">DIVISIONAL</div>
+                {_columna_vacia(2, alto_extra=40)}
+            </div>
+            <div style="width:110px; display:flex; flex-direction:column; justify-content:center;">
+                <div style="color:#8B9187; font-family:'Barlow Condensed',sans-serif; font-weight:700;
+                     font-size:0.7rem; text-align:center; margin-bottom:8px;">CAMPEÓN AFC</div>
+                {_columna_vacia(1)}
+            </div>
+            <div style="width:110px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                <div style="font-size:1.8rem;">🏆</div>
+                <div style="color:#F1F4F9; font-family:'Barlow Condensed',sans-serif; font-weight:800;
+                     font-size:0.85rem; text-align:center; margin-top:4px; line-height:1.1;">SUPER<br>BOWL</div>
+            </div>
+            <div style="width:110px; display:flex; flex-direction:column; justify-content:center;">
+                <div style="color:#8B9187; font-family:'Barlow Condensed',sans-serif; font-weight:700;
+                     font-size:0.7rem; text-align:center; margin-bottom:8px;">CAMPEÓN NFC</div>
+                {_columna_vacia(1)}
+            </div>
+            <div style="width:120px; display:flex; flex-direction:column; justify-content:center;">
+                <div style="color:#8B9187; font-family:'Barlow Condensed',sans-serif; font-weight:700;
+                     font-size:0.7rem; text-align:center; margin-bottom:8px;">DIVISIONAL</div>
+                {_columna_vacia(2, alto_extra=40)}
+            </div>
+            <div style="width:150px;">
+                <div style="color:{COLOR_NFC}; font-family:'Barlow Condensed',sans-serif; font-weight:800;
+                     font-size:0.8rem; text-align:center; margin-bottom:8px;">NFC · WILD CARD</div>
+                {_columna_wc(nfc, COLOR_NFC)}
+            </div>
+        </div>
+    </div>
+    """)
+
+
+def tabla_playoff_conferencia_html(nombre_conferencia: str, picture_conf: dict, color_borde: str) -> str:
+    """Cuadro resumen de la conferencia para el 'playoff picture':
+    campeones de división (seeds 1-4) y comodines/Wild Card (seeds
+    5-7), con el primer equipo fuera de la foto como referencia — mismo
+    lenguaje visual que las tablas de Standings (tarjeta blanca, borde
+    de color, separador punteado)."""
+    BLANCO = "#FFFFFF"
+    NEGRO = "#14241A"
+    GRIS = "#5C6B57"
+    PUNTEADO = "1.5px dotted #8B9187"
+
+    def _fila(item, es_ultimo=False):
+        borde = "" if es_ultimo else f"border-bottom:{PUNTEADO};"
+        etiqueta = "Campeón de división" if item["tipo"] == "División" else "Wild Card"
+        return f"""
+        <div style="display:flex; align-items:center; gap:12px; padding:8px 10px; {borde}">
+            <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.2rem;
+                 color:{color_borde}; width:20px; text-align:center; flex-shrink:0;">{item['seed']}</span>
+            <img src="{logo_url(item['equipo'])}" width="28" style="flex-shrink:0;">
+            <div style="flex:1; min-width:0;">
+                <div style="color:{NEGRO}; font-weight:700; font-size:0.95rem; white-space:nowrap;
+                     overflow:hidden; text-overflow:ellipsis;">{NOMBRES_COMPLETOS.get(item['equipo'], item['equipo'])}</div>
+                <div style="color:{GRIS}; font-size:0.72rem;">{etiqueta} · {item['division']}</div>
+            </div>
+            <div style="color:{NEGRO}; font-weight:700; font-size:0.9rem; flex-shrink:0;">{item['registro']}</div>
+        </div>"""
+
+    clasificados = picture_conf.get("clasificados", [])
+    primer_fuera = picture_conf.get("primer_fuera")
+    filas_html = "".join(
+        _fila(item, es_ultimo=(i == len(clasificados) - 1 and not primer_fuera))
+        for i, item in enumerate(clasificados)
+    )
+
+    pie_html = ""
+    if primer_fuera:
+        pie_html = f"""
+        <div style="padding:8px 10px; background:#F1F3EF;">
+            <div style="color:{GRIS}; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">
+                Primero fuera de la foto</div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <img src="{logo_url(primer_fuera['equipo'])}" width="22">
+                <span style="color:{NEGRO}; font-weight:600; font-size:0.85rem;">{NOMBRES_COMPLETOS.get(primer_fuera['equipo'], primer_fuera['equipo'])}</span>
+                <span style="color:{GRIS}; font-size:0.8rem; margin-left:auto;">{primer_fuera['registro']}</span>
+            </div>
+        </div>"""
+
+    return _sin_sangria(f"""
+    <div style="border:3px solid {color_borde}; border-radius:12px; overflow:hidden; margin-bottom:20px; background:{BLANCO};">
+        <div style="background:{color_borde}; padding:10px; text-align:center;">
+            <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.3rem;
+                 color:#FFFFFF; letter-spacing:0.05em;">{nombre_conferencia}</span>
+        </div>
+        {filas_html}
+        {pie_html}
+    </div>
+    """)
+
+
 def avisar_temporadas_faltantes(stats: pd.DataFrame):
     """Si alguna temporada del combinado no se pudo descargar, avisa cuáles
     sí se usaron en vez de fallar en silencio o tumbar todo el resultado.
@@ -1573,6 +1775,10 @@ if st.session_state.pagina == "estadisticas":
     encabezado_sitio("estadisticas")
     hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Standings</span>')
 
+    if st.button("🏆 Ver escenario de Playoffs", key="ir_a_playoffs", type="primary"):
+        st.session_state.pagina = "playoffs"
+        st.rerun()
+
     with st.container(key="selector_temporada"):
         anio_actual = _temporada_nfl_actual()
         anios_disponibles = list(range(anio_actual, 2014, -1))
@@ -1658,6 +1864,53 @@ if st.session_state.pagina == "estadisticas":
                     )
         except Exception as e:
             st.error(f"No se pudo cargar la tabla de posiciones: {e}")
+
+    st.stop()
+
+
+# ============================================================
+# PANTALLA: PLAYOFF PICTURE — quién clasificaría a playoffs (campeones
+# de división y wild cards de cada conferencia) según la tabla de
+# posiciones actual. Se recalcula solo cada vez que se entra a esta
+# pantalla, así que se va moviendo conforme se juegan más partidos —
+# no hay que actualizar nada a mano.
+# ============================================================
+if st.session_state.pagina == "playoffs":
+    encabezado_sitio("estadisticas")
+
+    if st.button("← Volver a Standings"):
+        st.session_state.pagina = "estadisticas"
+        st.rerun()
+
+    hero('<span style="color:#F1F4F9;">PLAYOFF</span> <span style="color:#BD4E1E;">PICTURE</span>')
+
+    season_playoffs = _temporada_nfl_actual()
+    standings_po = None
+    with st.spinner("Calculando escenario de playoffs..."):
+        try:
+            standings_po = standings_cacheados(season_playoffs, api_key=API_SPORTS_KEY)
+        except Exception as e:
+            st.error(f"No se pudo cargar la tabla de posiciones: {e}")
+
+    if standings_po is None or standings_po.empty:
+        st.info("Todavía no hay suficientes partidos jugados para calcular el escenario de playoffs.")
+    else:
+        st.caption(
+            "Clasificación proyectada según el récord actual de la temporada — se actualiza sola conforme "
+            "se juegan más partidos. El desempate usado aquí es simplificado (% de victorias y diferencial "
+            "de puntos); no incluye todos los criterios oficiales de desempate de la NFL, así que en casos "
+            "muy cerrados el orden real de la liga puede variar un poco."
+        )
+
+        picture = calcular_playoff_picture(standings_po)
+
+        st.markdown(bracket_visual_html(picture), unsafe_allow_html=True)
+
+        col_afc_po, col_nfc_po = st.columns(2)
+        with col_afc_po:
+            st.markdown(tabla_playoff_conferencia_html("AFC", picture.get("AFC", {}), "#C8102E"), unsafe_allow_html=True)
+        with col_nfc_po:
+            st.markdown(tabla_playoff_conferencia_html("NFC", picture.get("NFC", {}), "#1D4E8F"), unsafe_allow_html=True)
 
     st.stop()
 
