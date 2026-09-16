@@ -933,13 +933,31 @@ def _fecha_juego_api_sports(j: dict, respaldo: datetime.date = None) -> datetime
         return respaldo or datetime.date.today()
 
 
+def _semana_numero_api_sports(j: dict):
+    """Número de semana de un juego crudo de API-Sports, normalizado a int
+    — API-Sports a veces manda este campo como número (3) y a veces como
+    texto ("3" o "Week 3"), así que hay que extraer el número siempre de
+    la misma forma en vez de comparar el valor crudo directamente (eso
+    causaba que el selector de semana en Scores nunca encontrara partidos,
+    y que preseleccionar la semana 'actual' tronara al forzar int())."""
+    semana = (j.get("game") or {}).get("week")
+    if semana is None:
+        return None
+    if isinstance(semana, int):
+        return semana
+    coincidencia = re.search(r"\d+", str(semana))
+    return int(coincidencia.group()) if coincidencia else None
+
+
 def _semanas_min_max(juegos: list) -> dict:
     """{numero_semana: {"min": date, "max": date}} — el rango de fechas
     (primer y último partido) de cada jornada, a partir de la lista cruda
     de juegos de API-Sports (ya filtrada a temporada regular)."""
     semanas = {}
     for j in juegos:
-        semana = (j.get("game") or {}).get("week")
+        semana = _semana_numero_api_sports(j)
+        if semana is None:
+            continue
         f = _fecha_juego_api_sports(j)
         if semana not in semanas:
             semanas[semana] = {"min": f, "max": f}
@@ -1004,7 +1022,7 @@ def _formatear_partido_api_sports(j: dict) -> dict:
         "timestamp": (j.get("game") or {}).get("date", {}).get("timestamp"),
         "estadio": venue.get("name", ""),
         "ciudad": venue.get("city", ""),
-        "semana": (j.get("game") or {}).get("week"),
+        "semana": _semana_numero_api_sports(j),
     }
 
 
@@ -1030,7 +1048,7 @@ def obtener_marcadores_api_sports(api_key: str, season: int) -> list:
     semanas = _semanas_min_max(juegos)
     semana_actual = _semana_actual_por_corte(semanas, ahora)
 
-    de_esta_semana = [j for j in juegos if (j.get("game") or {}).get("week") == semana_actual]
+    de_esta_semana = [j for j in juegos if _semana_numero_api_sports(j) == semana_actual]
 
     def _terminado(j):
         estado = ((j.get("game") or {}).get("status") or {}).get("short", "NS")
@@ -1137,7 +1155,7 @@ def obtener_marcadores_semana_api_sports(api_key: str, season: int, week: int) -
     estado "NS" (Not Started) y sin marcador.
     """
     juegos = _juegos_temporada_regular_api_sports(api_key, season)
-    de_la_semana = [j for j in juegos if (j.get("game") or {}).get("week") == week]
+    de_la_semana = [j for j in juegos if _semana_numero_api_sports(j) == week]
     if not de_la_semana:
         return []
 
