@@ -775,21 +775,32 @@ def calcular_playoff_picture(standings: pd.DataFrame) -> dict:
 
 
 def _caja_bracket_html(item: dict = None, color_borde: str = "#8B9187", vacio_texto: str = "") -> str:
-    """Una casilla de la gráfica de bracket: con equipo (seed + logo) si
-    ya se conoce, o vacía/punteada si esa ronda todavía no se define."""
+    """Una casilla de la gráfica de bracket: con equipo (seed + logo +
+    una etiqueta de si clasificó como campeón de División o como Wild
+    Card) si ya se conoce, o vacía/punteada si esa ronda todavía no se
+    define."""
     if item is None:
         return f"""
-        <div style="background:#1A2318; border:1.5px dashed #33452F; border-radius:8px; height:40px;
-             display:flex; align-items:center; justify-content:center; color:#5C6B57; font-size:0.58rem;
+        <div style="background:#1A2318; border:1.5px dashed #33452F; border-radius:10px; height:64px;
+             display:flex; align-items:center; justify-content:center; color:#5C6B57; font-size:0.7rem;
              font-family:'Barlow Condensed',sans-serif; letter-spacing:0.05em; text-transform:uppercase;">{vacio_texto}</div>"""
+
+    es_division = item.get("tipo") == "División"
+    etiqueta = "DIV" if es_division else "WC"
+    fondo_etiqueta = color_borde if es_division else "#FFFFFF"
+    texto_etiqueta = "#FFFFFF" if es_division else color_borde
+
     return f"""
-    <div style="background:#FFFFFF; border:1.5px solid {color_borde}; border-radius:8px; height:40px;
-         display:flex; align-items:center; gap:8px; padding:0 10px;">
-        <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:0.9rem;
-             color:{color_borde}; width:16px; text-align:center; flex-shrink:0;">{item['seed']}</span>
-        <img src="{logo_url(item['equipo'])}" style="width:22px; height:22px; object-fit:contain; flex-shrink:0;">
-        <span style="color:#14241A; font-weight:700; font-size:0.68rem; text-transform:uppercase; white-space:nowrap;
-             overflow:hidden; text-overflow:ellipsis;">{item['equipo']}</span>
+    <div style="background:#FFFFFF; border:2px solid {color_borde}; border-radius:10px; height:64px;
+         display:flex; align-items:center; gap:10px; padding:0 14px;">
+        <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.3rem;
+             color:{color_borde}; width:24px; text-align:center; flex-shrink:0;">{item['seed']}</span>
+        <img src="{logo_url(item['equipo'])}" style="width:40px; height:40px; object-fit:contain; flex-shrink:0;">
+        <span style="color:#14241A; font-weight:800; font-size:1.1rem; text-transform:uppercase; white-space:nowrap;
+             overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0;">{item['equipo']}</span>
+        <span style="background:{fondo_etiqueta}; color:{texto_etiqueta}; border:1.5px solid {color_borde};
+             border-radius:5px; font-size:0.62rem; font-weight:800; padding:3px 6px; flex-shrink:0;
+             font-family:'Barlow Condensed',sans-serif; letter-spacing:0.03em;">{etiqueta}</span>
     </div>"""
 
 
@@ -817,43 +828,55 @@ def bracket_visual_html(picture: dict) -> str:
         )
 
     return _sin_sangria(f"""
-    <div style="background:#0E140C; border-radius:14px; padding:18px; margin-bottom:20px; overflow-x:auto;">
-        <div style="display:flex; gap:10px; min-width:760px; align-items:stretch; justify-content:center;">
-            <div style="width:150px;">
+    <div style="background:#0E140C; border-radius:14px; padding:22px; margin-bottom:20px; overflow-x:auto;">
+        <div style="display:flex; gap:14px; min-width:1250px; align-items:stretch; justify-content:center;">
+            <div style="width:220px;">
                 <div style="color:{COLOR_AFC}; font-family:'Barlow Condensed',sans-serif; font-weight:800;
-                     font-size:0.8rem; text-align:center; margin-bottom:8px;">AFC · WILD CARD</div>
+                     font-size:1rem; text-align:center; margin-bottom:10px;">AFC · WILD CARD</div>
                 {_columna_wc(afc, COLOR_AFC)}
             </div>
-            <div style="width:120px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="width:150px; display:flex; flex-direction:column; justify-content:center;">
                 <div style="color:#8B9187; font-family:'Barlow Condensed',sans-serif; font-weight:700;
-                     font-size:0.7rem; text-align:center; margin-bottom:8px;">DIVISIONAL</div>
-                {_columna_vacia(2, alto_extra=40)}
+                     font-size:0.85rem; text-align:center; margin-bottom:10px;">DIVISIONAL</div>
+                {_columna_vacia(2, alto_extra=64)}
             </div>
-            <div style="width:110px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="width:140px; display:flex; flex-direction:column; justify-content:center;">
                 <div style="color:#8B9187; font-family:'Barlow Condensed',sans-serif; font-weight:700;
-                     font-size:0.7rem; text-align:center; margin-bottom:8px;">CAMPEÓN AFC</div>
+                     font-size:0.85rem; text-align:center; margin-bottom:10px;">CAMPEÓN AFC</div>
                 {_columna_vacia(1)}
             </div>
-            <div style="width:110px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
-                <div style="font-size:1.8rem;">🏆</div>
+            <div style="width:140px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                <div style="font-size:2.4rem;">🏆</div>
                 <div style="color:#F1F4F9; font-family:'Barlow Condensed',sans-serif; font-weight:800;
-                     font-size:0.85rem; text-align:center; margin-top:4px; line-height:1.1;">SUPER<br>BOWL</div>
+                     font-size:1.05rem; text-align:center; margin-top:4px; line-height:1.1;">SUPER<br>BOWL</div>
             </div>
-            <div style="width:110px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="width:140px; display:flex; flex-direction:column; justify-content:center;">
                 <div style="color:#8B9187; font-family:'Barlow Condensed',sans-serif; font-weight:700;
-                     font-size:0.7rem; text-align:center; margin-bottom:8px;">CAMPEÓN NFC</div>
+                     font-size:0.85rem; text-align:center; margin-bottom:10px;">CAMPEÓN NFC</div>
                 {_columna_vacia(1)}
             </div>
-            <div style="width:120px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="width:150px; display:flex; flex-direction:column; justify-content:center;">
                 <div style="color:#8B9187; font-family:'Barlow Condensed',sans-serif; font-weight:700;
-                     font-size:0.7rem; text-align:center; margin-bottom:8px;">DIVISIONAL</div>
-                {_columna_vacia(2, alto_extra=40)}
+                     font-size:0.85rem; text-align:center; margin-bottom:10px;">DIVISIONAL</div>
+                {_columna_vacia(2, alto_extra=64)}
             </div>
-            <div style="width:150px;">
+            <div style="width:220px;">
                 <div style="color:{COLOR_NFC}; font-family:'Barlow Condensed',sans-serif; font-weight:800;
-                     font-size:0.8rem; text-align:center; margin-bottom:8px;">NFC · WILD CARD</div>
+                     font-size:1rem; text-align:center; margin-bottom:10px;">NFC · WILD CARD</div>
                 {_columna_wc(nfc, COLOR_NFC)}
             </div>
+        </div>
+        <div style="display:flex; justify-content:center; gap:18px; margin-top:18px;">
+            <span style="display:flex; align-items:center; gap:6px; color:#C9CDC5; font-size:0.75rem;
+                 font-family:'Barlow Condensed',sans-serif;">
+                <span style="background:#8B9187; color:#FFFFFF; border-radius:5px; font-size:0.62rem; font-weight:800;
+                     padding:3px 6px;">DIV</span> Campeón de división
+            </span>
+            <span style="display:flex; align-items:center; gap:6px; color:#C9CDC5; font-size:0.75rem;
+                 font-family:'Barlow Condensed',sans-serif;">
+                <span style="background:#FFFFFF; color:#8B9187; border:1.5px solid #8B9187; border-radius:5px;
+                     font-size:0.62rem; font-weight:800; padding:3px 6px;">WC</span> Wild Card
+            </span>
         </div>
     </div>
     """)
@@ -1303,30 +1326,30 @@ def _fila_score_semana(p: dict) -> str:
         score_home = "-"
 
     return f"""
-    <div style="display:flex; align-items:stretch; justify-content:center; border-radius:8px; overflow:hidden;
-         margin-bottom:10px; border:1.5px solid #E3E6E1; min-height:52px; max-width:480px;
+    <div style="display:flex; align-items:stretch; justify-content:center; border-radius:12px; overflow:hidden;
+         margin-bottom:16px; border:2px solid #E3E6E1; min-height:100px; max-width:900px;
          margin-left:auto; margin-right:auto;">
-        <div style="flex:0 1 200px; background:#FFFFFF; display:flex; align-items:center;
-             padding:0 8px; min-width:0;">
-            <img src="{logo_url(away)}" style="width:24px; height:24px; object-fit:contain; flex-shrink:0; margin-right:6px;">
-            <span style="color:{NEGRO}; font-weight:800; font-size:0.74rem;
+        <div style="flex:0 1 380px; background:#FFFFFF; display:flex; align-items:center;
+             padding:0 16px; min-width:0;">
+            <img src="{logo_url(away)}" style="width:48px; height:48px; object-fit:contain; flex-shrink:0; margin-right:12px;">
+            <span style="color:{NEGRO}; font-weight:800; font-size:1.48rem;
                  min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
                  text-transform:uppercase;">{NOMBRES_EQUIPO.get(away, away)}</span>
-            <span style="color:{ACENTO}; font-weight:800; font-size:1rem; flex-shrink:0; margin-left:auto;
-                 padding-left:8px;">{score_away}</span>
+            <span style="color:{ACENTO}; font-weight:800; font-size:2rem; flex-shrink:0; margin-left:auto;
+                 padding-left:16px;">{score_away}</span>
         </div>
-        <div style="flex:0 0 auto; background:#F1F3EF; color:{NEGRO}; font-weight:700; font-size:0.68rem;
-             display:flex; align-items:center; justify-content:center; padding:0 8px; text-align:center;
-             min-width:68px; white-space:normal; line-height:1.2; border-left:1.5px solid #E3E6E1;
-             border-right:1.5px solid #E3E6E1;">{centro}</div>
-        <div style="flex:0 1 200px; background:#FFFFFF; display:flex; align-items:center;
-             padding:0 8px; min-width:0;">
-            <span style="color:{ACENTO}; font-weight:800; font-size:1rem; flex-shrink:0; margin-right:auto;
-                 padding-right:6px;">{score_home}</span>
-            <span style="color:{NEGRO}; font-weight:800; font-size:0.74rem;
+        <div style="flex:0 0 auto; background:#F1F3EF; color:{NEGRO}; font-weight:700; font-size:1.36rem;
+             display:flex; align-items:center; justify-content:center; padding:0 16px; text-align:center;
+             min-width:136px; white-space:normal; line-height:1.2; border-left:2px solid #E3E6E1;
+             border-right:2px solid #E3E6E1;">{centro}</div>
+        <div style="flex:0 1 380px; background:#FFFFFF; display:flex; align-items:center;
+             padding:0 16px; min-width:0;">
+            <span style="color:{ACENTO}; font-weight:800; font-size:2rem; flex-shrink:0; margin-right:auto;
+                 padding-right:12px;">{score_home}</span>
+            <span style="color:{NEGRO}; font-weight:800; font-size:1.48rem;
                  min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-                 text-transform:uppercase; margin-right:8px;">{NOMBRES_EQUIPO.get(home, home)}</span>
-            <img src="{logo_url(home)}" style="width:24px; height:24px; object-fit:contain; flex-shrink:0;">
+                 text-transform:uppercase; margin-right:16px;">{NOMBRES_EQUIPO.get(home, home)}</span>
+            <img src="{logo_url(home)}" style="width:48px; height:48px; object-fit:contain; flex-shrink:0;">
         </div>
     </div>"""
 
@@ -1338,8 +1361,8 @@ def tabla_semana_scores_html(partidos: list) -> str:
     (ver pantalla Scores) para poder reaccionar a los botones ◀/▶."""
     filas = "".join(_fila_score_semana(p) for p in partidos)
     return _sin_sangria(f"""
-    <div style="background:#FFFFFF; border-radius:14px; padding:14px 14px 4px 14px; margin-bottom:16px;
-         max-width:520px; margin-left:auto; margin-right:auto; box-shadow:0 3px 10px rgba(0,0,0,0.25);">
+    <div style="background:#FFFFFF; border-radius:16px; padding:20px 20px 6px 20px; margin-bottom:16px;
+         max-width:940px; margin-left:auto; margin-right:auto; box-shadow:0 3px 10px rgba(0,0,0,0.25);">
         {filas}
     </div>
     """)
@@ -1775,7 +1798,7 @@ if st.session_state.pagina == "estadisticas":
     encabezado_sitio("estadisticas")
     hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Standings</span>')
 
-    if st.button("🏆 Ver escenario de Playoffs", key="ir_a_playoffs", type="primary"):
+    if st.button("Ver escenario de Playoffs", key="ir_a_playoffs", type="primary"):
         st.session_state.pagina = "playoffs"
         st.rerun()
 
@@ -1895,13 +1918,6 @@ if st.session_state.pagina == "playoffs":
     if standings_po is None or standings_po.empty:
         st.info("Todavía no hay suficientes partidos jugados para calcular el escenario de playoffs.")
     else:
-        st.caption(
-            "Clasificación proyectada según el récord actual de la temporada — se actualiza sola conforme "
-            "se juegan más partidos. El desempate usado aquí es simplificado (% de victorias y diferencial "
-            "de puntos); no incluye todos los criterios oficiales de desempate de la NFL, así que en casos "
-            "muy cerrados el orden real de la liga puede variar un poco."
-        )
-
         picture = calcular_playoff_picture(standings_po)
 
         st.markdown(bracket_visual_html(picture), unsafe_allow_html=True)
