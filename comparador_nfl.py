@@ -405,6 +405,132 @@ def combinar_stats_con_jugadores(stats: pd.DataFrame, jugadores: pd.DataFrame) -
 
 
 # ---------------------------------------------------------------------------
+# 2a-ter. RANKINGS DE JUGADORES POR ESTADÍSTICAS TRADICIONALES (pestaña Players)
+# ---------------------------------------------------------------------------
+# Para cada posición: la columna que define el ranking (la estadística
+# "de toda la vida" de esa posición, no puntos de fantasy) y qué columnas
+# adicionales mostrar, en el orden en que deben aparecer. La primera
+# columna de la lista es siempre la misma que "orden" — se usa como el
+# valor principal destacado en la tarjeta.
+POSICIONES_STATS_TRADICIONALES = {
+    "QB": {
+        "orden": "passing_yards",
+        "columnas": [
+            ("passing_yards", "YDS PASE"),
+            ("passing_tds", "TD PASE"),
+            ("interceptions", "INT"),
+            ("rushing_yards", "YDS CARRERA"),
+        ],
+    },
+    "RB": {
+        "orden": "rushing_yards",
+        "columnas": [
+            ("rushing_yards", "YDS CARRERA"),
+            ("rushing_tds", "TD CARRERA"),
+            ("receptions", "REC"),
+            ("receiving_yards", "YDS RECEP"),
+        ],
+    },
+    "WR": {
+        "orden": "receiving_yards",
+        "columnas": [
+            ("receiving_yards", "YDS RECEP"),
+            ("receptions", "REC"),
+            ("receiving_tds", "TD RECEP"),
+        ],
+    },
+    "TE": {
+        "orden": "receiving_yards",
+        "columnas": [
+            ("receiving_yards", "YDS RECEP"),
+            ("receptions", "REC"),
+            ("receiving_tds", "TD RECEP"),
+        ],
+    },
+}
+
+
+def obtener_jugadores_liga(season: int) -> pd.DataFrame:
+    """
+    Trae, en una sola descarga, las estadísticas de TODOS los jugadores de
+    la temporada (con su equipo y posición) — la base de datos que usa la
+    pestaña Players para armar el top de cualquier posición/equipo sin
+    tener que golpear la fuente una vez por cada combinación.
+
+    Devuelve columnas: Jugador, Equipo, Posición, y las estadísticas
+    tradicionales que haya disponibles (ver POSICIONES_STATS_TRADICIONALES).
+
+    Misma cadena de respaldo que el resto de funciones de jugadores de
+    este archivo: intenta nfl.import_seasonal_data(); si falla (404 de
+    raíz, típico en este entorno), cae al respaldo que descarga el
+    archivo de nflverse directamente; si esa temporada tampoco tiene
+    renglones todavía (apenas arrancó y el archivo no se ha
+    actualizado), reintenta un año atrás. La temporada realmente usada
+    queda en df.attrs["temporada_usada"].
+    """
+    if not NFL_DATA_PY_OK:
+        raise RuntimeError("nfl_data_py no disponible")
+
+    temporada_usada = season
+    uso_respaldo = False
+    try:
+        datos = nfl.import_seasonal_data([season])
+        if datos is None or datos.empty:
+            raise ValueError("vacío")
+    except Exception:
+        try:
+            datos = _stats_temporada_nflverse_directo([season])
+            uso_respaldo = True
+        except Exception:
+            temporada_usada = season - 1
+            try:
+                datos = _stats_temporada_nflverse_directo([temporada_usada])
+                uso_respaldo = True
+            except Exception as e:
+                raise ValueError(f"No hay estadísticas de jugadores disponibles ni para {season} ni para {temporada_usada}: {e}")
+
+    if not uso_respaldo:
+        roster = nfl.import_seasonal_rosters([temporada_usada])[["player_id", "player_name", "position", "team"]].drop_duplicates("player_id")
+        datos = datos.merge(roster, on="player_id", how="left")
+
+    columnas_stat = sorted({c for cfg in POSICIONES_STATS_TRADICIONALES.values() for c, _ in cfg["columnas"]})
+    columnas_disponibles = [c for c in ["player_name", "team", "position"] + columnas_stat if c in datos.columns]
+    datos = datos[columnas_disponibles].dropna(subset=["position", "team"])
+    datos = datos.rename(columns={"player_name": "Jugador", "team": "Equipo", "position": "Posición"})
+
+    datos.attrs["temporada_usada"] = temporada_usada
+    return datos
+
+
+def top_jugadores_por_posicion(datos: pd.DataFrame, posicion: str, top_n: int = 10, equipo: str = None) -> pd.DataFrame:
+    """
+    Filtra el DataFrame de obtener_jugadores_liga() a una posición (y,
+    opcionalmente, un equipo) y regresa el top N ordenado por la
+    estadística tradicional de esa posición. Es una función pura sobre
+    datos ya descargados — no vuelve a golpear ninguna fuente, así que se
+    puede llamar una vez por tarjeta sin preocuparse por costo extra."""
+    config = POSICIONES_STATS_TRADICIONALES.get(posicion)
+    if config is None:
+        raise ValueError(f"Posición sin estadísticas tradicionales configuradas: {posicion}")
+
+    columna_orden = config["orden"]
+    sub = datos[datos["Posición"] == posicion]
+    if equipo:
+        sub = sub[sub["Equipo"] == equipo]
+    if columna_orden not in sub.columns:
+        return pd.DataFrame(columns=["Jugador", "Equipo", "Posición"])
+
+    columnas_mostrar = [c for c, _ in config["columnas"] if c in sub.columns]
+    return (
+        sub[["Jugador", "Equipo", "Posición"] + columnas_mostrar]
+        .dropna(subset=[columna_orden])
+        .sort_values(columna_orden, ascending=False)
+        .head(top_n)
+        .reset_index(drop=True)
+    )
+
+
+# ---------------------------------------------------------------------------
 # 2b. CALENDARIO DE PARTIDOS VÍA nfl_data_py
 # ---------------------------------------------------------------------------
 def obtener_calendario_semana(season: int, week: int) -> pd.DataFrame:

@@ -32,6 +32,9 @@ from comparador_nfl import (
     obtener_lideres_estadisticos,
     obtener_ranking_fantasy,
     obtener_ranking_fantasy_espn,
+    obtener_jugadores_liga,
+    top_jugadores_por_posicion,
+    POSICIONES_STATS_TRADICIONALES,
     POSICIONES_CON_FANTASY,
     POSICIONES_SIN_FANTASY,
     POSICIONES_ESPN,
@@ -445,11 +448,24 @@ _SECCIONES_NAV = [
     ("inicio", "News"),
     ("estadisticas", "Standings"),
     ("scores", "Scores"),
+    ("players", "Players"),
     ("lesiones", "Injuries"),
     ("pronosticos", "Predictions"),
     ("fantasy", "Fantasy"),
     ("blog", "Insider"),
 ]
+
+# Color y nombre largo de cada posición en la pestaña Players — compartidos
+# entre la portada (tarjetas top 5) y la pantalla de detalle (top completo),
+# así que viven a nivel de módulo en vez de dentro de cada pantalla.
+COLORES_POSICION_PLAYERS = {
+    "QB": "#BD4E1E", "RB": "#1D4E8F", "WR": "#C8102E", "TE": "#2E7D46",
+    "K": "#5C6B57", "DST": "#6B4E9E",
+}
+ETIQUETAS_POSICION_PLAYERS = {
+    "QB": "Quarterbacks", "RB": "Running Backs", "WR": "Wide Receivers",
+    "TE": "Tight Ends", "K": "Kickers", "DST": "Defensas",
+}
 
 
 def logo_grande_centrado():
@@ -956,6 +972,73 @@ def tabla_playoff_conferencia_html(nombre_conferencia: str, picture_conf: dict, 
     """)
 
 
+def tarjeta_jugadores_html(
+    titulo: str, filas: pd.DataFrame, color: str, columna_valor: str, etiqueta_valor: str,
+    columnas_secundarias: list = None,
+) -> str:
+    """Tarjeta de ranking de jugadores (blanca, encabezado de color) —
+    usada tanto en la portada de Players (top 5, compacta, sin
+    columnas_secundarias) como en el detalle de una posición (top
+    10/25/50, con las columnas de stats extra de esa posición). Mismo
+    lenguaje visual que tabla_playoff_conferencia_html."""
+    BLANCO = "#FFFFFF"
+    NEGRO = "#14241A"
+    GRIS = "#5C6B57"
+    PUNTEADO = "1.5px dotted #8B9187"
+
+    def _valor(v):
+        return f"{v:,.0f}" if isinstance(v, float) else v
+
+    def _fila(i, row, es_ultimo):
+        borde = "" if es_ultimo else f"border-bottom:{PUNTEADO};"
+        secundarias_html = ""
+        if columnas_secundarias:
+            for col, etiqueta in columnas_secundarias:
+                if col not in row:
+                    continue
+                secundarias_html += f"""
+                <div style="text-align:center; min-width:56px; flex-shrink:0;">
+                    <div style="color:{NEGRO}; font-weight:700; font-size:0.82rem;">{_valor(row[col])}</div>
+                    <div style="color:{GRIS}; font-size:0.55rem; text-transform:uppercase; letter-spacing:0.03em;
+                         white-space:nowrap;">{etiqueta}</div>
+                </div>"""
+        return f"""
+        <div style="display:flex; align-items:center; gap:10px; padding:7px 10px; {borde}">
+            <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.05rem;
+                 color:{color}; width:18px; text-align:center; flex-shrink:0;">{i + 1}</span>
+            <img src="{logo_url(row['Equipo'])}" width="26" style="flex-shrink:0;">
+            <div style="flex:1; min-width:0;">
+                <div style="color:{NEGRO}; font-weight:700; font-size:0.9rem; white-space:nowrap;
+                     overflow:hidden; text-overflow:ellipsis;">{row['Jugador']}</div>
+                <div style="color:{GRIS}; font-size:0.68rem;">{row['Equipo']}</div>
+            </div>
+            {secundarias_html}
+            <div style="text-align:center; min-width:60px; flex-shrink:0;">
+                <div style="color:{color}; font-weight:800; font-size:0.95rem;">{_valor(row[columna_valor])}</div>
+                <div style="color:{GRIS}; font-size:0.55rem; text-transform:uppercase; letter-spacing:0.03em;
+                     white-space:nowrap;">{etiqueta_valor}</div>
+            </div>
+        </div>"""
+
+    if filas is None or filas.empty:
+        filas_html = f'<div style="padding:16px; text-align:center; color:{GRIS}; font-size:0.85rem;">Sin datos disponibles.</div>'
+    else:
+        filas_reseteadas = filas.reset_index(drop=True)
+        filas_html = "".join(
+            _fila(i, row, i == len(filas_reseteadas) - 1) for i, row in filas_reseteadas.iterrows()
+        )
+
+    return _sin_sangria(f"""
+    <div style="border:3px solid {color}; border-radius:12px; overflow:hidden; margin-bottom:16px; background:{BLANCO};">
+        <div style="background:{color}; padding:10px; text-align:center;">
+            <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.1rem;
+                 color:#FFFFFF; letter-spacing:0.05em;">{titulo}</span>
+        </div>
+        {filas_html}
+    </div>
+    """)
+
+
 def avisar_temporadas_faltantes(stats: pd.DataFrame):
     """Si alguna temporada del combinado no se pudo descargar, avisa cuáles
     sí se usaron en vez de fallar en silencio o tumbar todo el resultado.
@@ -993,6 +1076,15 @@ def stats_cacheadas(season: int, temporadas_historicas: int = 0) -> pd.DataFrame
         stats.attrs["jugadores_clave_error"] = str(e)
 
     return stats
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def jugadores_liga_cacheada(season: int) -> pd.DataFrame:
+    """Cachea 1 hora las estadísticas de TODOS los jugadores de la
+    temporada — la pestaña Players arma el top de cualquier
+    posición/equipo a partir de este único DataFrame ya descargado, en
+    vez de golpear la fuente una vez por cada combinación."""
+    return obtener_jugadores_liga(season)
 
 
 @st.cache_data(show_spinner=False, ttl=900)
@@ -1942,6 +2034,153 @@ if st.session_state.pagina == "playoffs":
             st.markdown(tabla_playoff_conferencia_html("AFC", picture.get("AFC", {}), "#C8102E"), unsafe_allow_html=True)
         with col_nfc_po:
             st.markdown(tabla_playoff_conferencia_html("NFC", picture.get("NFC", {}), "#1D4E8F"), unsafe_allow_html=True)
+
+    st.stop()
+
+
+# ============================================================
+# PANTALLA: PLAYERS — portada con el top 5 de cada posición (QB/RB/WR/TE
+# por estadísticas tradicionales, K/DST por puntos de fantasy de ESPN al
+# no haber estadísticas tradicionales públicas de esas dos posiciones),
+# con un botón por tarjeta para abrir el ranking completo de esa
+# posición (pantalla "players_detalle"), donde además se puede filtrar
+# por equipo.
+# ============================================================
+if st.session_state.pagina == "players":
+    encabezado_sitio("players")
+    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Players</span>')
+
+    with st.container(key="selector_temporada_players"):
+        anio_actual = _temporada_nfl_actual()
+        anios_disponibles = list(range(anio_actual, 2014, -1))
+        season_players = st.selectbox(
+            "Temporada", anios_disponibles,
+            index=0, key="season_players", label_visibility="collapsed",
+        )
+
+    with st.spinner("Cargando estadísticas de jugadores..."):
+        jugadores_liga = None
+        try:
+            jugadores_liga = jugadores_liga_cacheada(season_players)
+        except Exception as e:
+            st.error(f"No se pudieron cargar las estadísticas de jugadores: {e}")
+
+    if jugadores_liga is not None:
+        posiciones_orden = ["QB", "RB", "WR", "TE"]
+        for inicio in range(0, len(posiciones_orden), 2):
+            for col, pos in zip(st.columns(2), posiciones_orden[inicio:inicio + 2]):
+                with col:
+                    config = POSICIONES_STATS_TRADICIONALES[pos]
+                    top5 = top_jugadores_por_posicion(jugadores_liga, pos, top_n=5)
+                    st.markdown(
+                        tarjeta_jugadores_html(
+                            f"TOP {pos} · {ETIQUETAS_POSICION_PLAYERS[pos]}", top5, COLORES_POSICION_PLAYERS[pos],
+                            columna_valor=config["orden"], etiqueta_valor=config["columnas"][0][1],
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(f"Ver top completo de {pos} →", key=f"ver_top_{pos}", use_container_width=True):
+                        st.session_state.players_posicion = pos
+                        st.session_state.pagina = "players_detalle"
+                        st.rerun()
+
+        # K y DST: nflverse no trae estadísticas tradicionales para estas dos
+        # posiciones, así que se muestran por puntos de fantasy de ESPN como
+        # mejor esfuerzo — si esa fuente falla, se omite la tarjeta en vez de
+        # tumbar el resto de la pantalla.
+        for col, pos in zip(st.columns(2), ["K", "DST"]):
+            with col:
+                try:
+                    top5_kd = obtener_ranking_fantasy_espn(season_players, pos, top_n=5)
+                    st.markdown(
+                        tarjeta_jugadores_html(
+                            f"TOP {pos} · {ETIQUETAS_POSICION_PLAYERS[pos]}", top5_kd, COLORES_POSICION_PLAYERS[pos],
+                            columna_valor="Puntos", etiqueta_valor="PTS FANTASY",
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                    st.caption("Puntos de fantasy (ESPN) — no hay estadísticas tradicionales públicas para esta posición.")
+                    if st.button(f"Ver top completo de {pos} →", key=f"ver_top_{pos}", use_container_width=True):
+                        st.session_state.players_posicion = pos
+                        st.session_state.pagina = "players_detalle"
+                        st.rerun()
+                except Exception:
+                    pass
+
+    st.stop()
+
+
+# ============================================================
+# PANTALLA: DETALLE DE UNA POSICIÓN EN PLAYERS — ranking completo
+# (top 10/25/50) de la posición elegida en la portada, con filtro de
+# equipo y de temporada propios.
+# ============================================================
+if st.session_state.pagina == "players_detalle":
+    encabezado_sitio("players")
+
+    if st.button("← Volver a Players"):
+        st.session_state.pagina = "players"
+        st.rerun()
+
+    posicion = st.session_state.get("players_posicion", "QB")
+    color_pos = COLORES_POSICION_PLAYERS.get(posicion, "#BD4E1E")
+    etiqueta_pos = ETIQUETAS_POSICION_PLAYERS.get(posicion, posicion)
+
+    hero(f'<span style="color:{color_pos};">{etiqueta_pos.upper()}</span> <span style="color:#F1F4F9;">RANKING COMPLETO</span>')
+
+    col_temporada, col_equipo, col_top = st.columns([2, 2, 1])
+    with col_temporada:
+        anio_actual = _temporada_nfl_actual()
+        anios_disponibles = list(range(anio_actual, 2014, -1))
+        season_detalle = st.selectbox("Temporada", anios_disponibles, index=0, key="season_players_detalle")
+    with col_equipo:
+        equipo_filtro = st.selectbox(
+            "Equipo", ["Todos"] + sorted(NOMBRES_COMPLETOS.keys()),
+            format_func=lambda a: "Todos los equipos" if a == "Todos" else NOMBRES_COMPLETOS.get(a, a),
+            key="equipo_players_detalle",
+        )
+    with col_top:
+        top_n = st.selectbox("Mostrar", [10, 25, 50], index=1, key="top_n_players_detalle")
+
+    equipo_valor = None if equipo_filtro == "Todos" else equipo_filtro
+
+    if posicion in POSICIONES_STATS_TRADICIONALES:
+        with st.spinner("Cargando ranking..."):
+            top_df = None
+            try:
+                jugadores_liga = jugadores_liga_cacheada(season_detalle)
+                config = POSICIONES_STATS_TRADICIONALES[posicion]
+                top_df = top_jugadores_por_posicion(jugadores_liga, posicion, top_n=top_n, equipo=equipo_valor)
+            except Exception as e:
+                st.error(f"No se pudieron cargar las estadísticas de jugadores: {e}")
+        if top_df is not None:
+            st.markdown(
+                tarjeta_jugadores_html(
+                    f"TOP {posicion} · {etiqueta_pos}", top_df, color_pos,
+                    columna_valor=config["orden"], etiqueta_valor=config["columnas"][0][1],
+                    columnas_secundarias=config["columnas"][1:],
+                ),
+                unsafe_allow_html=True,
+            )
+    else:
+        # K / DST: mismo mejor esfuerzo vía puntos de fantasy de ESPN que en la portada.
+        with st.spinner("Cargando ranking..."):
+            top_df = None
+            try:
+                top_df = obtener_ranking_fantasy_espn(season_detalle, posicion, top_n=top_n)
+                if equipo_valor:
+                    top_df = top_df[top_df["Equipo"] == equipo_valor].reset_index(drop=True)
+            except Exception:
+                st.info("No se pudo cargar el ranking de esta posición por ahora — intenta de nuevo más tarde.")
+        if top_df is not None:
+            st.markdown(
+                tarjeta_jugadores_html(
+                    f"TOP {posicion} · {etiqueta_pos}", top_df, color_pos,
+                    columna_valor="Puntos", etiqueta_valor="PTS FANTASY",
+                ),
+                unsafe_allow_html=True,
+            )
+            st.caption("Puntos de fantasy (ESPN) — no hay estadísticas tradicionales públicas para esta posición.")
 
     st.stop()
 
