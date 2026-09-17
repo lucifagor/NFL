@@ -995,6 +995,24 @@ def _semana_actual_por_corte(semanas: dict, ahora: datetime.datetime) -> int:
     return semana_actual
 
 
+# Algunos proveedores devuelven el nombre oficial completo del estadio, que
+# en ciertos casos es demasiado largo para el recuadro del ticker de
+# resultados y lo estira. Aquí se recortan a una versión corta conocida
+# (agrega más casos si aparece otro estadio con el mismo problema).
+_NOMBRES_ESTADIO_CORTOS = {
+    "empower field at mile high": "Empower Field",
+}
+
+
+def _acortar_nombre_estadio(nombre: str) -> str:
+    """Recorta nombres de estadio demasiado largos a una versión corta
+    conocida, para que no se extienda el recuadro del ticker. Si el
+    nombre no está en la lista, se deja tal cual."""
+    if not nombre:
+        return nombre
+    return _NOMBRES_ESTADIO_CORTOS.get(nombre.strip().lower(), nombre)
+
+
 def _formatear_partido_api_sports(j: dict) -> dict:
     """Normaliza un juego crudo de API-Sports (/games) a nuestro formato
     común de partido — compartido entre el ticker de la semana 'actual' y
@@ -1020,7 +1038,7 @@ def _formatear_partido_api_sports(j: dict) -> dict:
         "fecha": (j.get("game") or {}).get("date", {}).get("date", ""),
         "hora": (j.get("game") or {}).get("date", {}).get("time", ""),
         "timestamp": (j.get("game") or {}).get("date", {}).get("timestamp"),
-        "estadio": venue.get("name", ""),
+        "estadio": _acortar_nombre_estadio(venue.get("name", "")),
         "ciudad": venue.get("city", ""),
         "semana": _semana_numero_api_sports(j),
     }
