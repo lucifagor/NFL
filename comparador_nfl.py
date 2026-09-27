@@ -759,6 +759,19 @@ def obtener_jugadores_liga(season: int) -> pd.DataFrame:
     )
     datos["fantasy_ppg"] = np.where(datos["games"] > 0, datos["fantasy_points_ppr"] / datos["games"].replace(0, 1), 0.0)
 
+    if datos.empty:
+        # No debería pasar con las fuentes actuales, pero si alguna vez
+        # ocurre (por ejemplo, un hipo de red que deja pasar una descarga
+        # vacía sin lanzar excepción) es mejor un error visible y claro que
+        # dejar caer un DataFrame vacío: sin este chequeo, cada tarjeta de
+        # Players terminaba mostrando "Sin datos disponibles" sin ninguna
+        # pista de qué había fallado.
+        raise ValueError(
+            f"La fuente de estadísticas de jugadores respondió, pero sin filas "
+            f"utilizables para la temporada {temporada_usada} (probablemente un "
+            f"problema temporal de red al descargar los datos)."
+        )
+
     datos.attrs["temporada_usada"] = temporada_usada
     return datos
 

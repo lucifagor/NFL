@@ -1519,7 +1519,7 @@ def fila_equipos_alfabetica():
         for abbr in orden_alfabetico
     )
     st.markdown(_sin_sangria(f"""
-    <div style="display:flex; flex-wrap:nowrap; gap:4px; margin:6px 0 2px 0;">{tarjetas}</div>
+    <div style="display:flex; flex-wrap:nowrap; gap:4px; margin:6px 0 12px 0;">{tarjetas}</div>
     """), unsafe_allow_html=True)
 
 
@@ -2464,13 +2464,20 @@ if st.session_state.pagina == "players":
     encabezado_sitio("players")
     hero('<span style="color:#BD4E1E;">Players</span>')
 
-    with st.container(key="selector_temporada_players"):
-        anio_actual = _temporada_nfl_actual()
-        anios_disponibles = list(range(anio_actual, 2014, -1))
-        season_players = st.selectbox(
-            "Temporada", anios_disponibles,
-            index=0, key="season_players", label_visibility="collapsed",
-        )
+    col_temporada, col_actualizar = st.columns([4, 1])
+    with col_temporada:
+        with st.container(key="selector_temporada_players"):
+            anio_actual = _temporada_nfl_actual()
+            anios_disponibles = list(range(anio_actual, 2014, -1))
+            season_players = st.selectbox(
+                "Temporada", anios_disponibles,
+                index=0, key="season_players", label_visibility="collapsed",
+            )
+    with col_actualizar:
+        if st.button("🔄 Actualizar", key="actualizar_jugadores_liga", use_container_width=True):
+            jugadores_liga_cacheada.clear()
+            st.session_state.pop(f"_players_auto_retry_{season_players}", None)
+            st.rerun()
 
     with st.spinner("Cargando estadísticas de jugadores..."):
         jugadores_liga = None
@@ -2481,6 +2488,41 @@ if st.session_state.pagina == "players":
 
     if jugadores_liga is not None:
         posiciones_orden = ["QB", "RB", "WR", "TE"]
+
+        # Antes de dibujar las tarjetas, se arman los 4 top-5 de una vez: si
+        # los CUATRO salen vacíos (jugadores_liga cargó pero, por ejemplo,
+        # un hipo de red dejó pasar un snapshot incompleto que quedó
+        # cacheado 1 hora), es más claro mostrar un solo aviso con un botón
+        # para reintentar que 4 tarjetas que solo dicen "Sin datos
+        # disponibles" sin explicar por qué. Se reintenta automáticamente
+        # una sola vez por temporada (limpiando el caché) antes de mostrar
+        # ese aviso, por si fue un hipo puntual de la fuente de datos.
+        tops_por_posicion = {
+            pos: top_jugadores_por_posicion(
+                jugadores_liga, pos, top_n=5,
+                columnas=POSICIONES_STATS_TRADICIONALES[pos]["columnas"],
+                orden_por=st.session_state.get(f"orden_portada_{pos}", POSICIONES_STATS_TRADICIONALES[pos]["orden"]),
+            )
+            for pos in posiciones_orden
+        }
+        todas_vacias = all(top.empty for top in tops_por_posicion.values())
+        clave_reintento = f"_players_auto_retry_{season_players}"
+        if todas_vacias and not st.session_state.get(clave_reintento):
+            st.session_state[clave_reintento] = True
+            jugadores_liga_cacheada.clear()
+            st.rerun()
+
+        if todas_vacias:
+            st.warning(
+                "No se pudieron armar los rankings de jugadores para esta temporada "
+                "(los datos cargaron pero no traían jugadores utilizables). Puede ser "
+                "un problema temporal de la fuente de datos — intenta de nuevo."
+            )
+            if st.button("🔄 Reintentar", key="reintentar_jugadores_liga"):
+                jugadores_liga_cacheada.clear()
+                st.session_state.pop(clave_reintento, None)
+                st.rerun()
+
         for inicio in range(0, len(posiciones_orden), 2):
             for col, pos in zip(st.columns(2), posiciones_orden[inicio:inicio + 2]):
                 with col:
@@ -2488,10 +2530,7 @@ if st.session_state.pagina == "players":
                     columnas_pos = config["columnas"]
                     columna_orden_activa = st.session_state.get(f"orden_portada_{pos}", config["orden"])
 
-                    top5 = top_jugadores_por_posicion(
-                        jugadores_liga, pos, top_n=5,
-                        columnas=columnas_pos, orden_por=columna_orden_activa,
-                    )
+                    top5 = tops_por_posicion[pos]
                     st.markdown(
                         tabla_jugadores_ordenable_html(
                             f"TOP {pos} · {ETIQUETAS_POSICION_PLAYERS[pos]}", top5, COLORES_POSICION_PLAYERS[pos],
