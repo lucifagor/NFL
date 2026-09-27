@@ -199,32 +199,18 @@ def obtener_stats_combinadas(season_actual: int, temporadas_historicas: int = 2)
 # ---------------------------------------------------------------------------
 # 2a-bis. DESEMPEÑO DE JUGADORES CLAVE (QB1 / RB1 / WR1 / TE1) POR EQUIPO
 # ---------------------------------------------------------------------------
-def _stats_temporada_nflverse_directo(temporadas: list) -> pd.DataFrame:
+def _agregar_semanal_a_temporada(semanal: pd.DataFrame) -> pd.DataFrame:
     """
-    Respaldo directo: descarga el archivo semanal de estadísticas de
-    jugador que nflverse publica en GitHub (el mismo proyecto detrás de
-    nfl_data_py) y lo agrega a nivel temporada nosotros mismos — sin
-    pasar por nfl.import_seasonal_data(), que está fallando con error
-    404 (probablemente apunta a una URL vieja que nflverse ya movió),
-    mientras que el resto de funciones de nfl_data_py sí funcionan bien.
+    Agrega un DataFrame "semanal" de estadísticas de jugador (una fila por
+    jugador y semana, con columnas player_id/player_name/position/team
+    (o recent_team) y las estadísticas tradicionales) a totales de
+    temporada, sumando cada estadística y contando los partidos jugados.
 
-    Devuelve las mismas columnas base que import_seasonal_data(), para
-    poder usarse como reemplazo directo donde se necesite.
-
-    Aviso honesto: no confirmado en vivo — no tengo acceso a internet en
-    este entorno de desarrollo. La URL viene de mi conocimiento general
-    de cómo está organizado el repositorio de datos de nflverse
-    (nflverse-data en GitHub), no de una prueba real contra el archivo.
+    La comparten los dos respaldos de este archivo: el que lee el
+    archivo semanal que publica nflverse y el que deriva las
+    estadísticas directamente de play-by-play — ambos arman ese mismo
+    formato "semanal" antes de llegar aquí.
     """
-    url = "https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats.csv.gz"
-    semanal = pd.read_csv(url, compression="gzip", low_memory=False)
-
-    if "season" not in semanal.columns:
-        raise ValueError("El archivo de nflverse no tiene la columna 'season' esperada.")
-    semanal = semanal[semanal["season"].isin(temporadas)]
-    if semanal.empty:
-        raise ValueError(f"No hay datos de jugadores para {temporadas} en el archivo de nflverse.")
-
     columna_equipo = "recent_team" if "recent_team" in semanal.columns else "team"
     columnas_sumar = [c for c in [
         "passing_yards", "passing_tds", "interceptions",
@@ -242,6 +228,193 @@ def _stats_temporada_nflverse_directo(temporadas: list) -> pd.DataFrame:
         .merge(juegos, on="player_id", how="left")
     )
     return agrupado
+
+
+def _stats_temporada_nflverse_directo(temporadas: list) -> pd.DataFrame:
+    """
+    Respaldo directo: descarga el archivo semanal de estadísticas de
+    jugador que nflverse publica en GitHub (el mismo proyecto detrás de
+    nfl_data_py) y lo agrega a nivel temporada nosotros mismos — sin
+    pasar por nfl.import_seasonal_data(), que da error 404 (apunta a un
+    archivo por año, player_stats_{año}.parquet, que nflverse todavía no
+    publica para la temporada en curso).
+
+    Devuelve las mismas columnas base que import_seasonal_data(), para
+    poder usarse como reemplazo directo donde se necesite.
+
+    Confirmado en vivo (probado directamente contra el archivo): cubre
+    las temporadas 2020-2024 completas, pero es un archivo que nflverse
+    dejó de actualizar — no incluye 2025 ni 2026. Para esas temporadas,
+    quien llame a esta función debe caer a `_stats_temporada_desde_pbp`.
+    """
+    url = "https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats.csv.gz"
+    semanal = pd.read_csv(url, compression="gzip", low_memory=False)
+
+    if "season" not in semanal.columns:
+        raise ValueError("El archivo de nflverse no tiene la columna 'season' esperada.")
+    semanal = semanal[semanal["season"].isin(temporadas)]
+    if semanal.empty:
+        raise ValueError(f"No hay datos de jugadores para {temporadas} en el archivo de nflverse.")
+
+    return _agregar_semanal_a_temporada(semanal)
+
+
+def _stats_temporada_desde_pbp(temporadas: list) -> pd.DataFrame:
+    """
+    Último respaldo, para cuando ni import_seasonal_data() ni el archivo
+    semanal de nflverse (player_stats.csv.gz, fijo en 2020-2024) tienen
+    datos de una temporada: calcula las estadísticas de jugador
+    directamente desde play-by-play (jugada por jugada), que SÍ se
+    publica y se actualiza para la temporada en curso — es el mismo
+    archivo que ya usa obtener_stats_temporada() para las estadísticas
+    de equipo, confirmado en vivo con datos de 2026.
+
+    Se cruza con el roster de cada temporada (import_seasonal_rosters)
+    para obtener la posición y el equipo de cada jugador, ya que
+    play-by-play no los trae directamente. Los puntos de fantasy se
+    aproximan con la fórmula estándar de puntuación PPR (yardas,
+    touchdowns, intercepciones, recepciones y fumbles perdidos; no
+    incluye bonos de 2 puntos ni el resto de detalles menores que sí
+    trae el archivo oficial de nflverse).
+
+    Devuelve las mismas columnas que _stats_temporada_nflverse_directo().
+    """
+    frames = []
+    for t in temporadas:
+        try:
+            pbp = nfl.import_pbp_data([t], downcast=True)
+        except Exception:
+            continue
+        if pbp is None or pbp.empty:
+            continue
+
+        requeridas = {
+            "passer_player_id", "rusher_player_id", "receiver_player_id",
+            "pass_attempt", "rush_attempt", "complete_pass",
+            "passing_yards", "pass_touchdown", "interception",
+            "rushing_yards", "rush_touchdown", "receiving_yards", "week",
+        }
+        if not requeridas.issubset(pbp.columns):
+            continue
+
+        pasador = (
+            pbp[pbp["pass_attempt"] == 1]
+            .groupby(["passer_player_id", "week"])
+            .agg(passing_yards=("passing_yards", "sum"),
+                 passing_tds=("pass_touchdown", "sum"),
+                 interceptions=("interception", "sum"))
+            .reset_index().rename(columns={"passer_player_id": "player_id"})
+        )
+        corredor = (
+            pbp[pbp["rush_attempt"] == 1]
+            .groupby(["rusher_player_id", "week"])
+            .agg(rushing_yards=("rushing_yards", "sum"),
+                 rushing_tds=("rush_touchdown", "sum"))
+            .reset_index().rename(columns={"rusher_player_id": "player_id"})
+        )
+        receptor = (
+            pbp[pbp["complete_pass"] == 1]
+            .groupby(["receiver_player_id", "week"])
+            .agg(receiving_yards=("receiving_yards", "sum"),
+                 receiving_tds=("pass_touchdown", "sum"),
+                 receptions=("complete_pass", "sum"))
+            .reset_index().rename(columns={"receiver_player_id": "player_id"})
+        )
+
+        semanal_t = pasador.merge(corredor, on=["player_id", "week"], how="outer")
+        semanal_t = semanal_t.merge(receptor, on=["player_id", "week"], how="outer")
+
+        if "fumbled_1_player_id" in pbp.columns and "fumble_lost" in pbp.columns:
+            fumbles = (
+                pbp[pbp["fumble_lost"] == 1]
+                .groupby(["fumbled_1_player_id", "week"])
+                .size().rename("fumbles_perdidos").reset_index()
+                .rename(columns={"fumbled_1_player_id": "player_id"})
+            )
+            semanal_t = semanal_t.merge(fumbles, on=["player_id", "week"], how="outer")
+
+        for col in [
+            "passing_yards", "passing_tds", "interceptions",
+            "rushing_yards", "rushing_tds",
+            "receiving_yards", "receiving_tds", "receptions", "fumbles_perdidos",
+        ]:
+            if col not in semanal_t.columns:
+                semanal_t[col] = 0.0
+            semanal_t[col] = semanal_t[col].fillna(0)
+
+        semanal_t = semanal_t[semanal_t["player_id"].notna() & (semanal_t["player_id"] != "")]
+        if semanal_t.empty:
+            continue
+
+        try:
+            roster_t = nfl.import_seasonal_rosters([t])[["player_id", "player_name", "position", "team"]]
+            roster_t = roster_t.drop_duplicates("player_id")
+        except Exception:
+            continue
+
+        semanal_t = semanal_t.merge(roster_t, on="player_id", how="inner")
+        if not semanal_t.empty:
+            frames.append(semanal_t)
+
+    if not frames:
+        raise ValueError(
+            f"No se pudieron calcular estadísticas de jugador desde play-by-play "
+            f"para {temporadas} (puede que la temporada no tenga jugadas "
+            f"publicadas todavía, o que falte el roster para cruzar posiciones)."
+        )
+
+    semanal = pd.concat(frames, ignore_index=True)
+
+    # Puntos de fantasy aproximados (fórmula PPR estándar), calculados por
+    # fila semanal antes de agregar a nivel temporada.
+    semanal["fantasy_points"] = (
+        semanal["passing_yards"] / 25 + semanal["passing_tds"] * 4 - semanal["interceptions"] * 2
+        + semanal["rushing_yards"] / 10 + semanal["rushing_tds"] * 6
+        + semanal["receiving_yards"] / 10 + semanal["receiving_tds"] * 6
+        - semanal["fumbles_perdidos"] * 2
+    )
+    semanal["fantasy_points_ppr"] = semanal["fantasy_points"] + semanal["receptions"]
+
+    return _agregar_semanal_a_temporada(semanal)
+
+
+def _stats_jugadores_temporada(temporadas: list) -> tuple:
+    """
+    Intenta obtener estadísticas de jugador para una lista de temporadas,
+    probando en orden: import_seasonal_data() (fuente oficial de
+    nfl_data_py) -> archivo semanal de nflverse descargado a mano (cubre
+    2020-2024) -> cálculo directo desde play-by-play (cubre cualquier
+    temporada con jugadas ya publicadas, incluida la actual).
+
+    Devuelve (datos, uso_respaldo): uso_respaldo=True cuando los datos ya
+    traen sus propias columnas 'position'/'team' (vienen de uno de los
+    dos respaldos), así que no hace falta cruzarlos con el roster
+    después; False cuando vienen de import_seasonal_data() y sí hace
+    falta ese cruce.
+
+    Lanza ValueError con el detalle de los tres intentos si los tres
+    fallan.
+    """
+    errores = []
+    try:
+        datos = nfl.import_seasonal_data(temporadas)
+        if datos is not None and not datos.empty:
+            return datos, False
+        errores.append("import_seasonal_data() devolvió vacío")
+    except Exception as e:
+        errores.append(f"import_seasonal_data(): {e}")
+
+    try:
+        return _stats_temporada_nflverse_directo(temporadas), True
+    except Exception as e:
+        errores.append(f"archivo semanal de nflverse: {e}")
+
+    try:
+        return _stats_temporada_desde_pbp(temporadas), True
+    except Exception as e:
+        errores.append(f"cálculo desde play-by-play: {e}")
+
+    raise ValueError(f"No hay estadísticas de jugadores disponibles para {temporadas} ({'; '.join(errores)})")
 
 
 def obtener_jugadores_clave(season_actual: int, temporadas_historicas: int = 0) -> pd.DataFrame:
@@ -272,31 +445,19 @@ def obtener_jugadores_clave(season_actual: int, temporadas_historicas: int = 0) 
         if temporadas_historicas > 0 else [season_actual]
     )
 
-    # nfl.import_seasonal_data() está fallando con 404 en el entorno de
-    # despliegue (para cualquier temporada, no solo la actual) — se
-    # intenta primero por si acaso, y si falla, se cae al respaldo que
-    # arma lo mismo descargando el archivo de nflverse directamente (ese
-    # respaldo ya trae 'position'/'team' propios, así que no hace falta
-    # cruzarlo con el roster después).
-    uso_respaldo = False
+    # nfl.import_seasonal_data() da 404 para la temporada en curso — se
+    # intenta primero por si acaso, y si falla se prueban en cascada los
+    # dos respaldos (archivo semanal de nflverse, luego cálculo directo
+    # desde play-by-play). Si ni así hay datos (temporada recién
+    # arrancada sin jugadas suficientes todavía), reintenta un año atrás.
     try:
-        datos = nfl.import_seasonal_data(temporadas)
-        if datos is None or datos.empty:
-            raise ValueError("vacío")
-    except Exception:
+        datos, uso_respaldo = _stats_jugadores_temporada(temporadas)
+    except ValueError:
+        temporadas = [t - 1 for t in temporadas]
         try:
-            datos = _stats_temporada_nflverse_directo(temporadas)
-            uso_respaldo = True
-        except Exception:
-            # El archivo de nflverse existe pero puede no tener renglones
-            # todavía para una temporada que apenas arrancó (se actualiza
-            # con algo de retraso) — reintenta un año atrás.
-            temporadas = [t - 1 for t in temporadas]
-            try:
-                datos = _stats_temporada_nflverse_directo(temporadas)
-                uso_respaldo = True
-            except Exception as e:
-                raise ValueError(f"No hay estadísticas de jugadores disponibles para {temporadas}: {e}")
+            datos, uso_respaldo = _stats_jugadores_temporada(temporadas)
+        except ValueError as e:
+            raise ValueError(f"No hay estadísticas de jugadores disponibles para {temporadas}: {e}")
 
     if not uso_respaldo:
         try:
@@ -462,32 +623,25 @@ def obtener_jugadores_liga(season: int) -> pd.DataFrame:
 
     Misma cadena de respaldo que el resto de funciones de jugadores de
     este archivo: intenta nfl.import_seasonal_data(); si falla (404 de
-    raíz, típico en este entorno), cae al respaldo que descarga el
-    archivo de nflverse directamente; si esa temporada tampoco tiene
-    renglones todavía (apenas arrancó y el archivo no se ha
-    actualizado), reintenta un año atrás. La temporada realmente usada
+    raíz para la temporada en curso), cae en cascada al archivo semanal
+    de nflverse y, si ese tampoco cubre la temporada (nflverse dejó de
+    actualizarlo desde 2024), al cálculo directo desde play-by-play. Si
+    ni así hay datos (temporada recién arrancada sin jugadas
+    suficientes), reintenta un año atrás. La temporada realmente usada
     queda en df.attrs["temporada_usada"].
     """
     if not NFL_DATA_PY_OK:
         raise RuntimeError("nfl_data_py no disponible")
 
     temporada_usada = season
-    uso_respaldo = False
     try:
-        datos = nfl.import_seasonal_data([season])
-        if datos is None or datos.empty:
-            raise ValueError("vacío")
-    except Exception:
+        datos, uso_respaldo = _stats_jugadores_temporada([season])
+    except ValueError:
+        temporada_usada = season - 1
         try:
-            datos = _stats_temporada_nflverse_directo([season])
-            uso_respaldo = True
-        except Exception:
-            temporada_usada = season - 1
-            try:
-                datos = _stats_temporada_nflverse_directo([temporada_usada])
-                uso_respaldo = True
-            except Exception as e:
-                raise ValueError(f"No hay estadísticas de jugadores disponibles ni para {season} ni para {temporada_usada}: {e}")
+            datos, uso_respaldo = _stats_jugadores_temporada([temporada_usada])
+        except ValueError as e:
+            raise ValueError(f"No hay estadísticas de jugadores disponibles ni para {season} ni para {temporada_usada}: {e}")
 
     if not uso_respaldo:
         roster = nfl.import_seasonal_rosters([temporada_usada])[["player_id", "player_name", "position", "team"]].drop_duplicates("player_id")
@@ -1613,34 +1767,24 @@ def obtener_ranking_fantasy(season: int, posicion: str = None, top_n: int = 50) 
 
     Si la temporada pedida todavía no tiene su archivo de datos
     publicado en nflverse (típico apenas arranca la temporada — da
-    error 404), cae automáticamente a la temporada anterior y lo avisa
-    en el resultado (stats.attrs["temporada_usada"]).
+    error 404), cae en cascada al archivo semanal de nflverse y, si ese
+    tampoco cubre la temporada, al cálculo directo desde play-by-play
+    (con puntos de fantasy aproximados por fórmula estándar PPR); si ni
+    así hay datos, reintenta con la temporada anterior y lo avisa en el
+    resultado (stats.attrs["temporada_usada"]).
     """
     if not NFL_DATA_PY_OK:
         raise RuntimeError("nfl_data_py no disponible")
 
     temporada_usada = season
-    uso_respaldo = False
     try:
-        datos = nfl.import_seasonal_data([season])
-        if datos is None or datos.empty:
-            raise ValueError("vacío")
-    except Exception:
-        # nfl.import_seasonal_data() está fallando con 404 de raíz — se
-        # cae al respaldo que descarga el archivo de nflverse a mano. Si
-        # tampoco tiene renglones para esta temporada (típico apenas
-        # arranca, el archivo se actualiza con un poco de retraso),
-        # reintenta con la temporada anterior.
+        datos, uso_respaldo = _stats_jugadores_temporada([season])
+    except ValueError:
+        temporada_usada = season - 1
         try:
-            datos = _stats_temporada_nflverse_directo([season])
-            uso_respaldo = True
-        except Exception:
-            temporada_usada = season - 1
-            try:
-                datos = _stats_temporada_nflverse_directo([temporada_usada])
-                uso_respaldo = True
-            except Exception as e:
-                raise ValueError(f"No hay estadísticas de jugadores disponibles ni para {season} ni para {temporada_usada}: {e}")
+            datos, uso_respaldo = _stats_jugadores_temporada([temporada_usada])
+        except ValueError as e:
+            raise ValueError(f"No hay estadísticas de jugadores disponibles ni para {season} ni para {temporada_usada}: {e}")
 
     columna_puntos = None
     for candidata in ["fantasy_points_ppr", "fantasy_points"]:
@@ -1678,21 +1822,13 @@ def obtener_lideres_estadisticos(season: int, top_n: int = 5) -> dict:
     if not NFL_DATA_PY_OK:
         raise RuntimeError("nfl_data_py no disponible")
 
-    uso_respaldo = False
     try:
-        datos = nfl.import_seasonal_data([season])
-        if datos is None or datos.empty:
-            raise ValueError("vacío")
-    except Exception:
+        datos, uso_respaldo = _stats_jugadores_temporada([season])
+    except ValueError:
         try:
-            datos = _stats_temporada_nflverse_directo([season])
-            uso_respaldo = True
-        except Exception:
-            try:
-                datos = _stats_temporada_nflverse_directo([season - 1])
-                uso_respaldo = True
-            except Exception as e:
-                raise ValueError(f"No hay estadísticas de jugadores disponibles ni para {season} ni para {season - 1}: {e}")
+            datos, uso_respaldo = _stats_jugadores_temporada([season - 1])
+        except ValueError as e:
+            raise ValueError(f"No hay estadísticas de jugadores disponibles ni para {season} ni para {season - 1}: {e}")
 
     if not uso_respaldo:
         jugadores = nfl.import_seasonal_rosters([season])[["player_id", "player_name", "team"]].drop_duplicates("player_id")
