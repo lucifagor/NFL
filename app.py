@@ -120,6 +120,16 @@ def inyectar_estilos():
     [data-testid="stMainBlockContainer"], .block-container {{
         max-width: 96vw !important; margin-left: auto !important; margin-right: auto !important;
         overflow-x: hidden;
+        /* Sin esto, el navegador "corrige" solo el scroll para mantener a
+           la vista lo que había antes cuando el contenido de arriba
+           cambia de tamaño (scroll anchoring) — confirmado en vivo que
+           esto peleaba contra el reset de scroll al cambiar de sección
+           (ver _inyectar_sticky_header_js) mientras Streamlit todavía
+           estaba acomodando el contenido de la sección nueva (spinners
+           que aparecen/desaparecen, tablas que llegan después),
+           regresando el scroll a la mitad de la pantalla anterior en
+           vez de dejarlo arriba del todo. */
+        overflow-anchor: none;
     }}
     * {{ box-sizing: border-box; }}
     </style>
@@ -180,9 +190,15 @@ def inyectar_estilos():
     /* Sidebar con borde sutil */
     [data-testid="stSidebar"] { border-right: 1px solid #26402F; }
 
-    /* Banner ilustrado tipo estadio (graderías + campo + postes) */
+    /* Banner ilustrado tipo estadio (graderías + campo + postes) — el
+       margen negativo de arriba recorta el espacio en blanco que deja
+       Streamlit por default arriba de cualquier pantalla (el padding-top
+       del block-container más el espacio entre los bloques de estilos
+       invisibles y este banner). Medido en vivo: sin esto el hueco antes
+       del banner era de 128px en cualquier sección del sitio; -5rem lo
+       deja en 64px (la mitad), en vez de los -1rem de antes. */
     .franja-campo {
-        margin: -1rem -1rem 1rem -1rem;
+        margin: -5rem -1rem 1rem -1rem;
         border-bottom: 2px solid #BD4E1E;
         position: relative;
         overflow: hidden;
@@ -575,10 +591,64 @@ def _inyectar_sticky_header_js():
     antes (guardado en el propio nodo del header) y ponemos uno nuevo —
     así nunca se acumulan varios ni se queda "colgado" un listener de un
     iframe anterior que ya no existe.
+
+    De paso, esta misma función detecta cuando cambiaste de SECCIÓN de
+    verdad (News, Standings, Players, el detalle de un equipo, etc.) —
+    no cuando solo cambia un selector o un pill dentro de la misma
+    pantalla — y en ese caso deja la pantalla nueva mostrada desde
+    arriba del todo (el banner), en vez de quedarse en el punto de
+    scroll donde estabas en la pantalla anterior (algo que, con el
+    header ahora pegado, era fácil que pasara).
+
+    En vez de llevar la cuenta de "¿cambió la página?" del lado de
+    Python (con st.session_state), cosa que en la práctica resultó
+    frágil — confirmado en vivo que Streamlit puede volver a ejecutar
+    el script completo más de una vez para una misma navegación, o con
+    otro conteo de reruns del que uno esperaría — nos fijamos en el
+    DOM: el botón del menú marcado como "primary" (barra_navegacion)
+    SIEMPRE refleja la sección realmente activa ahora mismo, sin
+    importar cuántas veces se haya vuelto a ejecutar el script. Cada
+    vez que este script corre (o sea, en cada rerun), compara esa
+    etiqueta contra la que guardó la vez anterior en el propio nodo del
+    header (header.dataset.seccionVista, que sobrevive entre reruns
+    porque es el mismo nodo de DOM) — si cambió, es un cambio de
+    sección de verdad.
+    Nota clave (confirmada en vivo, el bug que faltaba resolver): como
+    este HTML es un string ESTÁTICO (nada en él cambia de un rerun a
+    otro), Streamlit no vuelve a montar el iframe del componente en cada
+    rerun como se pensaba — al ser el mismo contenido, el frontend
+    reutiliza el iframe ya existente sin recargarlo, así que el script de
+    adentro solo corría una vez (la primera vez que aparecía el header) y
+    nunca se volvía a ejecutar en reruns posteriores, aunque sí cambiara
+    de sección. Por eso se incluye un comentario HTML con la hora actual
+    al final del documento: al cambiar ese string en cada rerun, el
+    contenido deja de ser idéntico y Streamlit sí vuelve a montar el
+    iframe (y por lo tanto a correr el script) cada vez.
     """
+    _nonce = datetime.datetime.now().isoformat()
     components.html(_sin_sangria("""
     <script>
     (function() {
+        function forzarScrollArriba(cont) {
+            // Streamlit restaura el scroll al punto donde estaba antes
+            // de navegar (para no perder el lugar del usuario en un
+            // rerun normal) — aquí es justo lo contrario de lo que
+            // queremos, y confirmado en vivo que lo hace en un momento
+            // variable (a veces al segundo, a veces varios segundos
+            // después, según qué tan lento cargue esa pantalla). Por
+            // eso insistimos en cada frame durante varios segundos en
+            // vez de una sola vez.
+            var inicio = window.parent.performance.now();
+            var DURACION_MS = 6000;
+            function paso(ts) {
+                if (cont.scrollTop !== 0) { cont.scrollTop = 0; }
+                if (ts - inicio < DURACION_MS) {
+                    window.parent.requestAnimationFrame(paso);
+                }
+            }
+            window.parent.requestAnimationFrame(paso);
+        }
+
         function enganchar() {
             var doc = window.parent.document;
             var cont = doc.querySelector('[data-testid="stMainBlockContainer"]');
@@ -624,37 +694,60 @@ def _inyectar_sticky_header_js():
             window.parent.addEventListener('resize', actualizar);
 
             actualizar();
+
+            // Detectar cambio de sección (ver docstring) y, si de verdad
+            // cambió, resetear el scroll.
+            var botonActivo = header.querySelector('button[kind="primary"]');
+            var etiqueta = botonActivo ? botonActivo.textContent.trim() : null;
+            if (etiqueta) {
+                if (header.dataset.seccionVista && header.dataset.seccionVista !== etiqueta) {
+                    forzarScrollArriba(cont);
+                }
+                header.dataset.seccionVista = etiqueta;
+            }
+
             return true;
         }
 
+        // window.parent.setInterval en vez del setInterval propio del
+        // iframe: confirmado en vivo que un iframe oculto (height=0) puede
+        // sufrir el mismo throttling de timers que una pestaña en segundo
+        // plano, haciendo que este bucle de reintentos se retrase o nunca
+        // llegue a encontrar cont/header a tiempo — atándolo al reloj de
+        // la pestaña visible (window.parent) lo evita.
         var intentos = 0;
-        var intervalo = setInterval(function() {
+        var intervalo = window.parent.setInterval(function() {
             intentos += 1;
-            if (enganchar() || intentos > 40) { clearInterval(intervalo); }
+            if (enganchar() || intentos > 40) { window.parent.clearInterval(intervalo); }
         }, 200);
     })();
     </script>
-    """), height=0)
+    """) + f"<!-- {_nonce} -->", height=0)
 
 
 def encabezado_sitio(activo: str):
     """Encabezado compartido por TODA la app: franja de campo, resultados
-    de la semana, menú de navegación, y la fila de logos de equipo — se
-    ve igual arriba de cualquier pantalla en la que estés.
+    de la semana, fila de logos de equipo y menú de navegación — se ve
+    igual arriba de cualquier pantalla en la que estés.
 
-    El ticker de resultados y el menú de navegación viven dentro de un
-    contenedor "pegado" — se quedan visibles arriba al hacer scroll
-    hacia abajo en cualquier pantalla del sitio (ver
-    _inyectar_sticky_header_js para el cómo). La franja de campo y la
-    fila de logos, fuera de ese contenedor, se desplazan con el resto
-    del contenido como siempre."""
+    El ticker de resultados, la fila de logos de equipo (entre el ticker
+    y el menú) y el menú de navegación viven dentro de un contenedor
+    "pegado" — se quedan visibles arriba al hacer scroll hacia abajo en
+    cualquier pantalla del sitio (ver _inyectar_sticky_header_js para el
+    cómo). Solo la franja de campo (el banner), fuera de ese contenedor,
+    se desplaza con el resto del contenido como siempre.
+
+    Esa misma función también deja la pantalla mostrada desde arriba del
+    todo cada vez que cambias de SECCIÓN de verdad (entrar a otra
+    pantalla del menú, al detalle de un equipo, "Ver top completo",
+    etc.) — ver su docstring para el cómo y el porqué."""
     franja_campo()
     with st.container(key="header_pegado"):
         _ticker_con_auto_refresco()
+        fila_equipos_alfabetica()
         logo_grande_centrado()
         barra_navegacion(activo)
     _inyectar_sticky_header_js()
-    fila_equipos_alfabetica()
 
 
 inyectar_estilos()
@@ -1205,59 +1298,93 @@ def tabla_playoff_conferencia_html(nombre_conferencia: str, picture_conf: dict, 
     """)
 
 
-def tarjeta_jugadores_html(
-    titulo: str, filas: pd.DataFrame, color: str, columna_valor: str, etiqueta_valor: str,
-    columnas_secundarias: list = None,
+def tabla_jugadores_ordenable_html(
+    titulo: str, filas: pd.DataFrame, color: str, columnas: list,
+    columna_activa: str, construir_href=None,
 ) -> str:
-    """Tarjeta de ranking de jugadores (blanca, encabezado de color) —
-    usada tanto en la portada de Players (top 5, compacta, sin
-    columnas_secundarias) como en el detalle de una posición (top
-    10/25/50, con las columnas de stats extra de esa posición). Mismo
-    lenguaje visual que tabla_playoff_conferencia_html."""
+    """Tabla de ranking de jugadores (blanca, encabezado de color, mismo
+    lenguaje visual que tabla_generica_html/tabla_playoff_conferencia_html)
+    — usada tanto en la portada de Players (top 5) como en el ranking
+    completo de una posición (top 10/25/50): las dos pantallas muestran
+    EXACTAMENTE las mismas columnas (ver POSICIONES_STATS_TRADICIONALES),
+    solo cambia cuántas filas trae cada una.
+
+    A diferencia de tabla_generica_html, el título de cada columna de
+    estadística es un hipervínculo real (mismo patrón de navegación por
+    URL que los logos de equipo en fila_equipos_alfabetica y el ticker de
+    resultados en ticker_marcadores) que reordena la lista por esa
+    estadística al hacer clic — en vez de un selector aparte arriba de la
+    tabla. Quien llama a esta función arma esa URL con `construir_href`
+    (recibe el nombre interno de la columna y regresa el href completo)
+    porque solo quien llama sabe en qué pantalla está y qué otros filtros
+    (temporada, equipo, cuántos mostrar) hay que conservar en el enlace;
+    si se omite, los títulos se muestran como texto plano sin enlace.
+
+    `columnas`: lista de (columna, etiqueta, decimales) — decimales
+    controla el formato del número (0 para yardas/TD/conteos, 1 para
+    puntos de fantasy y porcentajes). `columna_activa` es la columna por
+    la que está ordenada la tabla ahora mismo — su título y sus valores
+    se resaltan en el color de la posición para que se note de un
+    vistazo por cuál estadística está ordenado."""
     BLANCO = "#FFFFFF"
     NEGRO = "#14241A"
     GRIS = "#5C6B57"
     PUNTEADO = "1.5px dotted #8B9187"
+    FONDO_HEADER = "#F1F3EF"
 
-    def _valor(v):
-        return f"{v:,.0f}" if isinstance(v, float) else v
+    def _valor(v, decimales):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return "—"
+        try:
+            return f"{float(v):,.{decimales}f}"
+        except (TypeError, ValueError):
+            return str(v)
+
+    grid_cols = "24px 30px minmax(120px, 1.6fr)" + "".join(" minmax(60px, 1fr)" for _ in columnas)
+
+    def _titulo_columna(col, etiqueta):
+        activa = col == columna_activa
+        estilo = f"color:{color}; border-bottom:2px solid {color};" if activa else f"color:{NEGRO}; border-bottom:2px solid transparent;"
+        contenido = f'<span style="padding-bottom:2px; {estilo}">{etiqueta}{" ▾" if activa else ""}</span>'
+        href = construir_href(col) if construir_href else None
+        if href:
+            return f'<a href="{href}" target="_self" style="text-decoration:none; display:block;">{contenido}</a>'
+        return contenido
+
+    encabezado = (
+        '<div></div><div></div>'
+        '<div class="tabla-sitio-header" style="text-align:left; padding:0 8px;">JUGADOR</div>'
+    )
+    for col, etiqueta, _ in columnas:
+        encabezado += (
+            f'<div class="tabla-sitio-header" style="text-align:center; padding:0 2px;">'
+            f'{_titulo_columna(col, etiqueta)}</div>'
+        )
 
     def _fila(i, row, es_ultimo):
         borde = "" if es_ultimo else f"border-bottom:{PUNTEADO};"
-        secundarias_html = ""
-        if columnas_secundarias:
-            for col, etiqueta in columnas_secundarias:
-                if col not in row:
-                    continue
-                secundarias_html += f"""
-                <div style="text-align:center; min-width:40px; flex-shrink:0;">
-                    <div style="color:{NEGRO}; font-weight:700; font-size:0.76rem;">{_valor(row[col])}</div>
-                    <div style="color:{GRIS}; font-size:0.5rem; text-transform:uppercase; letter-spacing:0.02em;
-                         white-space:nowrap;">{etiqueta}</div>
-                </div>"""
+        celdas = "".join(
+            f'<div style="text-align:center; font-size:0.82rem; padding:0 2px; '
+            f'font-weight:{"800" if col == columna_activa else "600"}; '
+            f'color:{color if col == columna_activa else NEGRO};">{_valor(row.get(col), decimales)}</div>'
+            for col, _, decimales in columnas
+        )
         return f"""
-        <div style="display:flex; align-items:center; gap:6px; padding:7px 8px; {borde}">
-            <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.05rem;
-                 color:{color}; width:16px; text-align:center; flex-shrink:0;">{i + 1}</span>
-            <img src="{logo_url(row['Equipo'])}" width="24" style="flex-shrink:0;">
-            <div style="flex:1; min-width:32px;">
-                <div style="color:{NEGRO}; font-weight:700; font-size:0.85rem; white-space:nowrap;
-                     overflow:hidden; text-overflow:ellipsis;">{row['Jugador']}</div>
-                <div style="color:{GRIS}; font-size:0.64rem;">{row['Equipo']}</div>
-            </div>
-            {secundarias_html}
-            <div style="text-align:center; min-width:52px; flex-shrink:0;">
-                <div style="color:{color}; font-weight:800; font-size:0.92rem;">{_valor(row[columna_valor])}</div>
-                <div style="color:{GRIS}; font-size:0.5rem; text-transform:uppercase; letter-spacing:0.02em;
-                     white-space:nowrap;">{etiqueta_valor}</div>
-            </div>
+        <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center;
+             background:{BLANCO}; {borde} padding:7px 0;">
+            <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:0.95rem;
+                 color:{color}; text-align:center;">{i + 1}</span>
+            <img src="{logo_url(row['Equipo'])}" width="22" style="display:block; margin:0 auto;">
+            <div style="padding:0 8px; font-weight:700; color:{NEGRO}; font-size:0.85rem;
+                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{row['Jugador']}</div>
+            {celdas}
         </div>"""
 
     if filas is None or filas.empty:
-        filas_html = f'<div style="padding:16px; text-align:center; color:{GRIS}; font-size:0.85rem;">Sin datos disponibles.</div>'
+        cuerpo_html = f'<div style="padding:16px; text-align:center; color:{GRIS}; font-size:0.85rem;">Sin datos disponibles.</div>'
     else:
         filas_reseteadas = filas.reset_index(drop=True)
-        filas_html = "".join(
+        cuerpo_html = "".join(
             _fila(i, row, i == len(filas_reseteadas) - 1) for i, row in filas_reseteadas.iterrows()
         )
 
@@ -1268,7 +1395,11 @@ def tarjeta_jugadores_html(
                  color:#FFFFFF; letter-spacing:0.05em;">{titulo}</span>
         </div>
         <div style="overflow-x:auto;">
-        {filas_html}
+            <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center;
+                 background:{FONDO_HEADER}; padding:6px 0; border-bottom:2px solid #E4E6E1;">
+                {encabezado}
+            </div>
+            {cuerpo_html}
         </div>
     </div>
     """)
@@ -1366,20 +1497,29 @@ def ranking_fantasy_espn_cacheado(season: int, posicion_espn: str, top_n: int = 
 def fila_equipos_alfabetica():
     """Fila horizontal con los 32 logos de equipo, en orden alfabético,
     cuadrados y alineados — cada logo es un hipervínculo real
-    (?equipo=ABBR), sin depender de botones ni overlays de Streamlit."""
+    (?equipo=ABBR), sin depender de botones ni overlays de Streamlit.
+
+    Vive DENTRO del header pegado (ver encabezado_sitio), entre el
+    ticker de resultados y el menú — por eso cada logo usa flex:1 en vez
+    de un ancho fijo: los 32 se reparten en una sola línea (nunca pasan
+    a una segunda fila, sin importar el tamaño de pantalla) y entre
+    todos ocupan siempre el mismo ancho total que el resto del header
+    (el ticker, el menú), en vez del tamaño fijo de antes que a veces
+    alcanzaba para una fila y media."""
     orden_alfabetico = sorted(EQUIPOS)
     tarjetas = "".join(
-        f'''<a href="?equipo={abbr}" target="_self" style="text-decoration:none; flex:0 0 auto;">
-            <div style="width:38px; height:38px; background:#D8DBD4; border:1px solid #AEB4A9;
-                 border-radius:6px; display:flex; align-items:center; justify-content:center;
-                 box-shadow:0 2px 0 #8B9187, 0 3px 5px rgba(0,0,0,0.3);">
-                <img src="{logo_url(abbr)}" style="width:29px; height:29px; object-fit:contain; display:block;">
+        f'''<a href="?equipo={abbr}" target="_self"
+            style="text-decoration:none; flex:1 1 0; min-width:0;">
+            <div style="width:100%; aspect-ratio:1/1; background:#D8DBD4; border:1px solid #AEB4A9;
+                 border-radius:5px; display:flex; align-items:center; justify-content:center;
+                 box-shadow:0 2px 0 #8B9187, 0 2px 4px rgba(0,0,0,0.3);">
+                <img src="{logo_url(abbr)}" style="width:76%; height:76%; object-fit:contain; display:block;">
             </div>
         </a>'''
         for abbr in orden_alfabetico
     )
     st.markdown(_sin_sangria(f"""
-    <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin:4px 0 20px 0;">{tarjetas}</div>
+    <div style="display:flex; flex-wrap:nowrap; gap:4px; margin:6px 0 2px 0;">{tarjetas}</div>
     """), unsafe_allow_html=True)
 
 
@@ -1744,6 +1884,43 @@ if st.query_params.get("partido"):
 if st.query_params.get("articulo"):
     st.session_state.articulo_detalle = st.query_params["articulo"]
     st.session_state.pagina = "articulo_detalle"
+    st.query_params.clear()
+
+# El título de cada columna de estadística en Players (portada y ranking
+# completo) es, igual que los logos de equipo de arriba, un hipervínculo
+# real — al hacer clic reordena la tabla por esa estadística. Como cada
+# clic es una navegación de página completa (no un rerun normal de
+# Streamlit), el enlace tiene que traer TODO lo necesario para reconstruir
+# la pantalla exacta en la que estaba quien hizo clic — de otro modo se
+# perdería la posición/temporada/equipo/cuántos-mostrar que tenía
+# elegidos. Por eso el valor va con "|" como separador en vez de usar un
+# parámetro por cada cosa.
+#
+# ?orden_portada=POSICION|columna|temporada
+if st.query_params.get("orden_portada"):
+    try:
+        pos_qp, col_qp, temporada_qp = st.query_params["orden_portada"].split("|")
+        if pos_qp in POSICIONES_STATS_TRADICIONALES:
+            st.session_state.pagina = "players"
+            st.session_state[f"orden_portada_{pos_qp}"] = col_qp
+            st.session_state["season_players"] = int(temporada_qp)
+    except Exception:
+        pass
+    st.query_params.clear()
+
+# ?orden_detalle=POSICION|columna|temporada|equipo|top_n
+if st.query_params.get("orden_detalle"):
+    try:
+        pos_qp, col_qp, temporada_qp, equipo_qp, top_n_qp = st.query_params["orden_detalle"].split("|")
+        if pos_qp in POSICIONES_STATS_TRADICIONALES:
+            st.session_state.pagina = "players_detalle"
+            st.session_state.players_posicion = pos_qp
+            st.session_state[f"orden_detalle_{pos_qp}"] = col_qp
+            st.session_state["season_players_detalle"] = int(temporada_qp)
+            st.session_state["equipo_players_detalle"] = equipo_qp
+            st.session_state["top_n_players_detalle"] = int(top_n_qp)
+    except Exception:
+        pass
     st.query_params.clear()
 
 # Detecta la zona horaria del navegador de quien ve la app (una sola vez
@@ -2308,26 +2485,18 @@ if st.session_state.pagina == "players":
             for col, pos in zip(st.columns(2), posiciones_orden[inicio:inicio + 2]):
                 with col:
                     config = POSICIONES_STATS_TRADICIONALES[pos]
-                    columnas_portada = config["columnas_portada"]
-                    etiqueta_a_columna = {etiqueta: columna for columna, etiqueta in columnas_portada}
-
-                    orden_label = st.pills(
-                        f"Ordenar {pos} por", list(etiqueta_a_columna.keys()),
-                        default=columnas_portada[0][1], required=True,
-                        key=f"orden_portada_{pos}", label_visibility="collapsed",
-                    )
-                    columna_orden_activa = etiqueta_a_columna.get(orden_label, config["orden"])
+                    columnas_pos = config["columnas"]
+                    columna_orden_activa = st.session_state.get(f"orden_portada_{pos}", config["orden"])
 
                     top5 = top_jugadores_por_posicion(
                         jugadores_liga, pos, top_n=5,
-                        columnas=columnas_portada, orden_por=columna_orden_activa,
+                        columnas=columnas_pos, orden_por=columna_orden_activa,
                     )
-                    columnas_secundarias_activas = [c for c in columnas_portada if c[0] != columna_orden_activa]
                     st.markdown(
-                        tarjeta_jugadores_html(
+                        tabla_jugadores_ordenable_html(
                             f"TOP {pos} · {ETIQUETAS_POSICION_PLAYERS[pos]}", top5, COLORES_POSICION_PLAYERS[pos],
-                            columna_valor=columna_orden_activa, etiqueta_valor=orden_label,
-                            columnas_secundarias=columnas_secundarias_activas,
+                            columnas=columnas_pos, columna_activa=columna_orden_activa,
+                            construir_href=lambda c, p=pos: f"?orden_portada={p}|{c}|{season_players}",
                         ),
                         unsafe_allow_html=True,
                     )
@@ -2339,15 +2508,17 @@ if st.session_state.pagina == "players":
         # K y DST: nflverse no trae estadísticas tradicionales para estas dos
         # posiciones, así que se muestran por puntos de fantasy de ESPN como
         # mejor esfuerzo — si esa fuente falla, se omite la tarjeta en vez de
-        # tumbar el resto de la pantalla.
+        # tumbar el resto de la pantalla. Solo traen una estadística (puntos),
+        # así que la tabla se muestra sin encabezado ordenable (no hay nada
+        # más por lo que reordenar).
         for col, pos in zip(st.columns(2), ["K", "DST"]):
             with col:
                 try:
                     top5_kd = obtener_ranking_fantasy_espn(season_players, pos, top_n=5)
                     st.markdown(
-                        tarjeta_jugadores_html(
+                        tabla_jugadores_ordenable_html(
                             f"TOP {pos} · {ETIQUETAS_POSICION_PLAYERS[pos]}", top5_kd, COLORES_POSICION_PLAYERS[pos],
-                            columna_valor="Puntos", etiqueta_valor="PTS FANTASY",
+                            columnas=[("Puntos", "PTS FANTASY", 1)], columna_activa="Puntos",
                         ),
                         unsafe_allow_html=True,
                     )
@@ -2398,15 +2569,8 @@ if st.session_state.pagina == "players_detalle":
 
     if posicion in POSICIONES_STATS_TRADICIONALES:
         config = POSICIONES_STATS_TRADICIONALES[posicion]
-        columnas_detalle = config["columnas_detalle"]
-        etiqueta_a_columna = {etiqueta: columna for columna, etiqueta in columnas_detalle}
-
-        orden_label = st.pills(
-            "Ordenar por", list(etiqueta_a_columna.keys()),
-            default=columnas_detalle[0][1], required=True,
-            key=f"orden_detalle_{posicion}",
-        )
-        columna_orden_activa = etiqueta_a_columna.get(orden_label, config["orden"])
+        columnas_pos = config["columnas"]
+        columna_orden_activa = st.session_state.get(f"orden_detalle_{posicion}", config["orden"])
 
         with st.spinner("Cargando ranking..."):
             top_df = None
@@ -2414,22 +2578,25 @@ if st.session_state.pagina == "players_detalle":
                 jugadores_liga = jugadores_liga_cacheada(season_detalle)
                 top_df = top_jugadores_por_posicion(
                     jugadores_liga, posicion, top_n=top_n, equipo=equipo_valor,
-                    columnas=columnas_detalle, orden_por=columna_orden_activa,
+                    columnas=columnas_pos, orden_por=columna_orden_activa,
                 )
             except Exception as e:
                 st.error(f"No se pudieron cargar las estadísticas de jugadores: {e}")
         if top_df is not None:
-            columnas_secundarias_activas = [c for c in columnas_detalle if c[0] != columna_orden_activa]
             st.markdown(
-                tarjeta_jugadores_html(
+                tabla_jugadores_ordenable_html(
                     f"TOP {posicion} · {etiqueta_pos}", top_df, color_pos,
-                    columna_valor=columna_orden_activa, etiqueta_valor=orden_label,
-                    columnas_secundarias=columnas_secundarias_activas,
+                    columnas=columnas_pos, columna_activa=columna_orden_activa,
+                    construir_href=lambda c: (
+                        f"?orden_detalle={posicion}|{c}|{season_detalle}|{equipo_filtro}|{top_n}"
+                    ),
                 ),
                 unsafe_allow_html=True,
             )
     else:
         # K / DST: mismo mejor esfuerzo vía puntos de fantasy de ESPN que en la portada.
+        # Solo traen una estadística (puntos), así que no hay nada más por
+        # lo que reordenar — el encabezado se muestra sin hipervínculo.
         with st.spinner("Cargando ranking..."):
             top_df = None
             try:
@@ -2440,9 +2607,9 @@ if st.session_state.pagina == "players_detalle":
                 st.info("No se pudo cargar el ranking de esta posición por ahora — intenta de nuevo más tarde.")
         if top_df is not None:
             st.markdown(
-                tarjeta_jugadores_html(
+                tabla_jugadores_ordenable_html(
                     f"TOP {posicion} · {etiqueta_pos}", top_df, color_pos,
-                    columna_valor="Puntos", etiqueta_valor="PTS FANTASY",
+                    columnas=[("Puntos", "PTS FANTASY", 1)], columna_activa="Puntos",
                 ),
                 unsafe_allow_html=True,
             )
