@@ -568,44 +568,87 @@ def combinar_stats_con_jugadores(stats: pd.DataFrame, jugadores: pd.DataFrame) -
 # ---------------------------------------------------------------------------
 # 2a-ter. RANKINGS DE JUGADORES POR ESTADÍSTICAS TRADICIONALES (pestaña Players)
 # ---------------------------------------------------------------------------
-# Para cada posición: la columna que define el ranking (la estadística
-# "de toda la vida" de esa posición, no puntos de fantasy) y qué columnas
-# adicionales mostrar, en el orden en que deben aparecer. La primera
-# columna de la lista es siempre la misma que "orden" — se usa como el
-# valor principal destacado en la tarjeta.
+# Para cada posición: "orden" es la columna de ordenamiento por default
+# (yardas totales generadas, sin importar de qué tipo — pase, carrera o
+# recepción), "columnas_portada" son las estadísticas que se muestran en
+# las tarjetas de top 5 de la portada de Players, y "columnas_detalle"
+# las que se muestran en el ranking completo (más desglosadas: ahí sí se
+# separan TD de pase y TD de carrera, por ejemplo). En ambos casos, la
+# UI deja elegir cualquiera de esas columnas como criterio de orden
+# (ver top_jugadores_por_posicion) — "orden" es solo el default inicial.
 POSICIONES_STATS_TRADICIONALES = {
     "QB": {
-        "orden": "passing_yards",
-        "columnas": [
-            ("passing_yards", "YDS PASE"),
-            ("passing_tds", "TD PASE"),
-            ("interceptions", "INT"),
+        "orden": "yardas_totales",
+        "columnas_portada": [
+            ("yardas_totales", "YDS TOTALES"),
+            ("games", "PJ"),
             ("rushing_yards", "YDS CARRERA"),
+            ("passing_yards", "YDS PASE"),
+            ("touchdowns_totales", "TD"),
+        ],
+        "columnas_detalle": [
+            ("yardas_totales", "YDS TOTALES"),
+            ("games", "PJ"),
+            ("passing_yards", "YDS PASE"),
+            ("rushing_yards", "YDS CARRERA"),
+            ("passing_tds", "TD PASE"),
+            ("rushing_tds", "TD CARRERA"),
+            ("interceptions", "INT"),
         ],
     },
     "RB": {
-        "orden": "rushing_yards",
-        "columnas": [
+        "orden": "yardas_totales",
+        "columnas_portada": [
+            ("yardas_totales", "YDS TOTALES"),
             ("rushing_yards", "YDS CARRERA"),
-            ("rushing_tds", "TD CARRERA"),
-            ("receptions", "REC"),
             ("receiving_yards", "YDS RECEP"),
+            ("games", "PJ"),
+            ("touchdowns_totales", "TD"),
+        ],
+        "columnas_detalle": [
+            ("yardas_totales", "YDS TOTALES"),
+            ("games", "PJ"),
+            ("rushing_yards", "YDS CARRERA"),
+            ("receiving_yards", "YDS RECEP"),
+            ("rushing_tds", "TD CARRERA"),
+            ("receiving_tds", "TD RECEP"),
+            ("receptions", "REC"),
         ],
     },
     "WR": {
-        "orden": "receiving_yards",
-        "columnas": [
+        "orden": "yardas_totales",
+        "columnas_portada": [
+            ("yardas_totales", "YDS TOTALES"),
+            ("receiving_yards", "YDS AÉREAS"),
+            ("games", "PJ"),
+            ("touchdowns_totales", "TD"),
+        ],
+        "columnas_detalle": [
+            ("yardas_totales", "YDS TOTALES"),
+            ("games", "PJ"),
             ("receiving_yards", "YDS RECEP"),
-            ("receptions", "REC"),
             ("receiving_tds", "TD RECEP"),
+            ("receptions", "REC"),
+            ("rushing_yards", "YDS CARRERA"),
+            ("rushing_tds", "TD CARRERA"),
         ],
     },
     "TE": {
-        "orden": "receiving_yards",
-        "columnas": [
+        "orden": "yardas_totales",
+        "columnas_portada": [
+            ("yardas_totales", "YDS TOTALES"),
+            ("receiving_yards", "YDS AÉREAS"),
+            ("games", "PJ"),
+            ("touchdowns_totales", "TD"),
+        ],
+        "columnas_detalle": [
+            ("yardas_totales", "YDS TOTALES"),
+            ("games", "PJ"),
             ("receiving_yards", "YDS RECEP"),
-            ("receptions", "REC"),
             ("receiving_tds", "TD RECEP"),
+            ("receptions", "REC"),
+            ("rushing_yards", "YDS CARRERA"),
+            ("rushing_tds", "TD CARRERA"),
         ],
     },
 }
@@ -647,34 +690,72 @@ def obtener_jugadores_liga(season: int) -> pd.DataFrame:
         roster = nfl.import_seasonal_rosters([temporada_usada])[["player_id", "player_name", "position", "team"]].drop_duplicates("player_id")
         datos = datos.merge(roster, on="player_id", how="left")
 
-    columnas_stat = sorted({c for cfg in POSICIONES_STATS_TRADICIONALES.values() for c, _ in cfg["columnas"]})
-    columnas_disponibles = [c for c in ["player_name", "team", "position"] + columnas_stat if c in datos.columns]
+    columnas_stat = sorted({
+        c for cfg in POSICIONES_STATS_TRADICIONALES.values()
+        for lista in (cfg["columnas_portada"], cfg["columnas_detalle"])
+        for c, _ in lista
+        if c not in ("yardas_totales", "touchdowns_totales", "games")
+    })
+    columnas_disponibles = [c for c in ["player_name", "team", "position", "games"] + columnas_stat if c in datos.columns]
     datos = datos[columnas_disponibles].dropna(subset=["position", "team"])
     datos = datos.rename(columns={"player_name": "Jugador", "team": "Equipo", "position": "Posición"})
+
+    # Estadísticas derivadas, disponibles para CUALQUIER posición (se usan
+    # como criterio de orden por default en Players: "yardas totales
+    # generadas" sin importar si son de pase, carrera o recepción — y su
+    # equivalente en touchdowns). Si alguna columna base no vino en esta
+    # fuente, se trata como 0 en vez de tumbar el cálculo.
+    for base in ["passing_yards", "rushing_yards", "receiving_yards", "passing_tds", "rushing_tds", "receiving_tds"]:
+        if base not in datos.columns:
+            datos[base] = 0.0
+    datos["yardas_totales"] = datos["passing_yards"] + datos["rushing_yards"] + datos["receiving_yards"]
+    datos["touchdowns_totales"] = datos["passing_tds"] + datos["rushing_tds"] + datos["receiving_tds"]
 
     datos.attrs["temporada_usada"] = temporada_usada
     return datos
 
 
-def top_jugadores_por_posicion(datos: pd.DataFrame, posicion: str, top_n: int = 10, equipo: str = None) -> pd.DataFrame:
+def top_jugadores_por_posicion(
+    datos: pd.DataFrame, posicion: str, top_n: int = 10, equipo: str = None,
+    columnas: list = None, orden_por: str = None,
+) -> pd.DataFrame:
     """
     Filtra el DataFrame de obtener_jugadores_liga() a una posición (y,
-    opcionalmente, un equipo) y regresa el top N ordenado por la
-    estadística tradicional de esa posición. Es una función pura sobre
-    datos ya descargados — no vuelve a golpear ninguna fuente, así que se
-    puede llamar una vez por tarjeta sin preocuparse por costo extra."""
+    opcionalmente, un equipo) y regresa el top N. Es una función pura
+    sobre datos ya descargados — no vuelve a golpear ninguna fuente, así
+    que se puede llamar una vez por tarjeta sin preocuparse por costo
+    extra.
+
+    `columnas`: lista de (columna, etiqueta) a incluir en el resultado —
+    por default, las de portada de esa posición
+    (POSICIONES_STATS_TRADICIONALES[posicion]["columnas_portada"]); pasa
+    ["columnas_detalle"] de esa misma config para el ranking completo.
+
+    `orden_por`: nombre de columna por la que ordenar — por default, la
+    columna "orden" de esa posición (yardas totales generadas). Se puede
+    pasar cualquiera de las columnas incluidas en `columnas` para
+    reordenar por esa estadística en particular (esto es lo que usa la
+    UI de Players cuando el usuario elige "ordenar por" una estadística
+    distinta a la de por default)."""
     config = POSICIONES_STATS_TRADICIONALES.get(posicion)
     if config is None:
         raise ValueError(f"Posición sin estadísticas tradicionales configuradas: {posicion}")
 
-    columna_orden = config["orden"]
+    columnas = columnas if columnas is not None else config["columnas_portada"]
+    columna_orden = orden_por or config["orden"]
+
     sub = datos[datos["Posición"] == posicion]
     if equipo:
         sub = sub[sub["Equipo"] == equipo]
-    if columna_orden not in sub.columns:
-        return pd.DataFrame(columns=["Jugador", "Equipo", "Posición"])
 
-    columnas_mostrar = [c for c, _ in config["columnas"] if c in sub.columns]
+    columnas_mostrar = [c for c, _ in columnas if c in sub.columns]
+    if columna_orden not in sub.columns:
+        columna_orden = config["orden"] if config["orden"] in sub.columns else None
+    if columna_orden is None or not columnas_mostrar:
+        return pd.DataFrame(columns=["Jugador", "Equipo", "Posición"])
+    if columna_orden not in columnas_mostrar:
+        columnas_mostrar = [columna_orden] + columnas_mostrar
+
     return (
         sub[["Jugador", "Equipo", "Posición"] + columnas_mostrar]
         .dropna(subset=[columna_orden])

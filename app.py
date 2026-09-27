@@ -249,7 +249,44 @@ def inyectar_estilos():
     [data-testid="stMetric"] label, [data-testid="stMetric"] [data-testid="stMetricValue"] {
         color: #14241A !important;
     }
-    [data-testid="stDataFrame"] { background: #D8DBD4; border-radius: 8px; }
+    /* Encabezado pegado — el ticker de resultados y el menú de
+       navegación se quedan visibles arriba al hacer scroll en
+       cualquier pantalla (la franja de campo y la fila de logos de
+       equipo, en cambio, sí se desplazan normalmente). Fondo sólido
+       del mismo verde oscuro de marca, para que el contenido de abajo
+       no se transparente al pasar debajo.
+
+       Nota técnica: un "position: sticky" de CSS puro NO funciona aquí
+       porque Streamlit envuelve cada st.container() en un div que mide
+       exactamente el alto de su propio contenido (nunca más alto que el
+       header mismo) — sin ese "margen" extra arriba/abajo, sticky no
+       tiene dónde quedarse pegado y el header se desplaza igual que
+       cualquier otro elemento. Por eso el "pegado" real se logra con un
+       poquito de JavaScript (ver _inyectar_sticky_header_js) que activa
+       position: fixed mientras hay scroll; esta regla solo pone el
+       fondo/z-index base para que se vea bien tanto pegado como no. */
+    div[class*="st-key-header_pegado"] {
+        background: #14241A;
+        padding-top: 8px;
+        padding-bottom: 4px;
+        z-index: 999;
+    }
+    /* Borde y sombra solo cuando el JS lo marcó como realmente pegado
+       (position: fixed) — evita una sombra rara cuando está arriba del
+       todo, en su lugar normal dentro del flujo de la página. */
+    div[class*="st-key-header_pegado"][data-pegado="1"] {
+        border-bottom: 2px solid #26402F;
+        box-shadow: 0 6px 12px rgba(0,0,0,0.35);
+    }
+
+    /* Tablas propias del sitio (tabla_generica_html y similares) —
+       blancas con borde de color, mismo diseño que Standings. Ya no se
+       usa st.dataframe() en ninguna pantalla para que todas las tablas
+       del sitio compartan este mismo look and feel. */
+    .tabla-sitio-header {
+        font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 0.78rem;
+        color: #14241A; text-transform: uppercase; letter-spacing: 0.02em;
+    }
     </style>
     """), unsafe_allow_html=True)
 
@@ -512,14 +549,111 @@ def _ticker_con_auto_refresco():
     ticker_marcadores(partidos_ticker, standings_ticker)
 
 
+def _inyectar_sticky_header_js():
+    """
+    Engancha el comportamiento de "header pegado" con un poquito de
+    JavaScript, porque el "position: sticky" de CSS puro no alcanza aquí
+    (ver la nota en inyectar_estilos, junto a la regla de
+    st-key-header_pegado): el contenedor que Streamlit genera para
+    nuestro st.container(key="header_pegado") mide exactamente el alto
+    de su contenido, así que nunca tiene "margen" de sobra para que el
+    header se quede fijo mientras el resto de la página se desplaza.
+
+    Este script vive en un iframe de componente de Streamlit
+    (st.components.v1.html), pero manipula el DOM de la página
+    principal a través de window.parent — algo permitido porque el
+    iframe se sirve desde el mismo origen que el resto de la app. Al
+    hacer scroll dentro del contenedor real de Streamlit
+    (stMainBlockContainer), activa "position: fixed" en el header y lo
+    alinea en píxeles con el ancho/posición actual de ese contenedor; al
+    volver arriba del todo, lo regresa a su lugar normal dentro del
+    flujo de la página.
+
+    Streamlit vuelve a ejecutar este componente en cada rerun (cambio de
+    pantalla, clic en un botón, etc.), así que cada vez removemos
+    cualquier listener de scroll/resize que hayamos dejado enganchado
+    antes (guardado en el propio nodo del header) y ponemos uno nuevo —
+    así nunca se acumulan varios ni se queda "colgado" un listener de un
+    iframe anterior que ya no existe.
+    """
+    components.html(_sin_sangria("""
+    <script>
+    (function() {
+        function enganchar() {
+            var doc = window.parent.document;
+            var cont = doc.querySelector('[data-testid="stMainBlockContainer"]');
+            var header = doc.querySelector('div[class*="st-key-header_pegado"]');
+            if (!cont || !header) { return false; }
+
+            var wrapper = header.parentElement;
+
+            function actualizar() {
+                var rect = cont.getBoundingClientRect();
+                var pegar = cont.scrollTop > 0;
+                if (pegar) {
+                    if (wrapper && !wrapper.style.height) {
+                        wrapper.style.height = header.offsetHeight + 'px';
+                    }
+                    header.style.position = 'fixed';
+                    header.style.top = rect.top + 'px';
+                    header.style.left = rect.left + 'px';
+                    header.style.width = rect.width + 'px';
+                    header.style.margin = '0';
+                    header.setAttribute('data-pegado', '1');
+                } else {
+                    header.style.position = '';
+                    header.style.top = '';
+                    header.style.left = '';
+                    header.style.width = '';
+                    header.style.margin = '';
+                    header.removeAttribute('data-pegado');
+                    if (wrapper) { wrapper.style.height = ''; }
+                }
+            }
+
+            if (header._pegadoScrollHandler) {
+                cont.removeEventListener('scroll', header._pegadoScrollHandler);
+            }
+            header._pegadoScrollHandler = actualizar;
+            cont.addEventListener('scroll', actualizar, { passive: true });
+
+            if (header._pegadoResizeHandler) {
+                window.parent.removeEventListener('resize', header._pegadoResizeHandler);
+            }
+            header._pegadoResizeHandler = actualizar;
+            window.parent.addEventListener('resize', actualizar);
+
+            actualizar();
+            return true;
+        }
+
+        var intentos = 0;
+        var intervalo = setInterval(function() {
+            intentos += 1;
+            if (enganchar() || intentos > 40) { clearInterval(intervalo); }
+        }, 200);
+    })();
+    </script>
+    """), height=0)
+
+
 def encabezado_sitio(activo: str):
     """Encabezado compartido por TODA la app: franja de campo, resultados
     de la semana, menú de navegación, y la fila de logos de equipo — se
-    ve igual arriba de cualquier pantalla en la que estés."""
+    ve igual arriba de cualquier pantalla en la que estés.
+
+    El ticker de resultados y el menú de navegación viven dentro de un
+    contenedor "pegado" — se quedan visibles arriba al hacer scroll
+    hacia abajo en cualquier pantalla del sitio (ver
+    _inyectar_sticky_header_js para el cómo). La franja de campo y la
+    fila de logos, fuera de ese contenedor, se desplazan con el resto
+    del contenido como siempre."""
     franja_campo()
-    _ticker_con_auto_refresco()
-    logo_grande_centrado()
-    barra_navegacion(activo)
+    with st.container(key="header_pegado"):
+        _ticker_con_auto_refresco()
+        logo_grande_centrado()
+        barra_navegacion(activo)
+    _inyectar_sticky_header_js()
     fila_equipos_alfabetica()
 
 
@@ -636,6 +770,105 @@ def tabla_division_html(nombre_division: str, filas: pd.DataFrame, color_header:
             {_celda("E", "font-weight:700; font-size:0.95rem;")}
             {_celda(".PCT", "font-weight:700; font-size:0.95rem;")}
             {encabezado_extra}
+        </div>
+        {filas_html}
+    </div>
+    """)
+
+
+# Columnas que, cuando aparecen en un DataFrame pasado a
+# tabla_generica_html(), se reconocen automáticamente como "esta celda
+# es un equipo" y se dibujan como logo en vez de texto — así cualquier
+# tabla nueva del sitio hereda el mismo tratamiento sin configurarlo a mano.
+_COLUMNAS_EQUIPO_AUTO = ["Equipo", "Rival", "team", "recent_team"]
+
+
+def tabla_generica_html(
+    df: pd.DataFrame, color_borde: str = "#BD4E1E",
+    columnas_numericas: list = None, ancho_primera_col: str = "1.6fr",
+) -> str:
+    """
+    Tabla genérica de uso general (fondo blanco, borde de color, texto
+    negro, separador punteado entre filas) — el mismo lenguaje visual
+    que las tablas de Standings (tabla_division_html), pero sin asumir
+    columnas fijas: sirve para cualquier DataFrame (roster, calendario,
+    ranking de fantasy, líderes por posición, etc.).
+
+    Esta es la tabla que reemplaza a st.dataframe() en todo el sitio —
+    st.dataframe() hereda los colores oscuros del tema de Streamlit
+    (se veía "verde" en vez de blanco); esta función es la regla de
+    diseño única para tablas de aquí en adelante.
+
+    Si el DataFrame trae una columna de equipo (ver
+    _COLUMNAS_EQUIPO_AUTO), esa columna se dibuja como el logo del
+    equipo en vez de su abreviatura de texto. La primera columna
+    "de texto" (normalmente un nombre) se alinea a la izquierda y en
+    negritas; el resto se centran, como en una tabla de estadísticas.
+    `columnas_numericas` es opcional — solo se usa para redondear
+    floats a 1 decimal en vez de mostrarlos con muchos dígitos.
+    """
+    BLANCO = "#FFFFFF"
+    NEGRO = "#14241A"
+    GRIS = "#5C6B57"
+    PUNTEADO = "1.5px dotted #8B9187"
+    FONDO_HEADER = "#F1F3EF"
+
+    if df is None or df.empty:
+        return _sin_sangria(f"""
+        <div style="border:2px solid {color_borde}; border-radius:12px; padding:18px;
+             text-align:center; color:{GRIS}; background:{BLANCO}; font-size:0.88rem;">
+            Sin datos disponibles.
+        </div>""")
+
+    columnas = list(df.columns)
+    col_equipo = next((c for c in _COLUMNAS_EQUIPO_AUTO if c in columnas), None)
+    columnas_texto = [c for c in columnas if c != col_equipo]
+    if not columnas_texto:
+        return ""
+    primera, resto = columnas_texto[0], columnas_texto[1:]
+
+    grid_cols = ("34px " if col_equipo else "") + ancho_primera_col + "".join(" minmax(64px, 1fr)" for _ in resto)
+
+    def _fmt(v):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return "—"
+        if isinstance(v, float):
+            return f"{v:,.0f}" if float(v).is_integer() else f"{v:,.1f}"
+        return str(v)
+
+    encabezado = '<div></div>' if col_equipo else ""
+    encabezado += f'<div class="tabla-sitio-header" style="text-align:left; padding:0 10px;">{primera}</div>'
+    for c in resto:
+        encabezado += f'<div class="tabla-sitio-header" style="text-align:center; padding:0 4px;">{c}</div>'
+
+    filas_html = ""
+    total_filas = len(df)
+    for i, (_, row) in enumerate(df.iterrows()):
+        borde = "" if i == total_filas - 1 else f"border-bottom:{PUNTEADO};"
+        celda_equipo = ""
+        if col_equipo:
+            abbr = row[col_equipo]
+            celda_equipo = f'<div style="text-align:center;"><img src="{logo_url(abbr)}" width="22"></div>'
+        celda_primera = (
+            f'<div style="padding:0 10px; font-weight:700; color:{NEGRO}; font-size:0.9rem; '
+            f'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{_fmt(row[primera])}</div>'
+        )
+        celdas_resto = "".join(
+            f'<div style="text-align:center; font-size:0.85rem; color:{NEGRO}; padding:0 4px;">{_fmt(row[c])}</div>'
+            for c in resto
+        )
+        filas_html += f"""
+        <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center;
+             background:{BLANCO}; {borde} padding:8px 0;">
+            {celda_equipo}{celda_primera}{celdas_resto}
+        </div>"""
+
+    return _sin_sangria(f"""
+    <div style="border:2px solid {color_borde}; border-radius:12px; overflow-x:auto; overflow-y:hidden;
+         margin-bottom:16px; max-width:100%; background:{BLANCO};">
+        <div style="display:grid; grid-template-columns:{grid_cols}; align-items:center;
+             background:{FONDO_HEADER}; padding:8px 0; border-bottom:2px solid #E4E6E1;">
+            {encabezado}
         </div>
         {filas_html}
     </div>
@@ -997,25 +1230,25 @@ def tarjeta_jugadores_html(
                 if col not in row:
                     continue
                 secundarias_html += f"""
-                <div style="text-align:center; min-width:56px; flex-shrink:0;">
-                    <div style="color:{NEGRO}; font-weight:700; font-size:0.82rem;">{_valor(row[col])}</div>
-                    <div style="color:{GRIS}; font-size:0.55rem; text-transform:uppercase; letter-spacing:0.03em;
+                <div style="text-align:center; min-width:40px; flex-shrink:0;">
+                    <div style="color:{NEGRO}; font-weight:700; font-size:0.76rem;">{_valor(row[col])}</div>
+                    <div style="color:{GRIS}; font-size:0.5rem; text-transform:uppercase; letter-spacing:0.02em;
                          white-space:nowrap;">{etiqueta}</div>
                 </div>"""
         return f"""
-        <div style="display:flex; align-items:center; gap:10px; padding:7px 10px; {borde}">
+        <div style="display:flex; align-items:center; gap:6px; padding:7px 8px; {borde}">
             <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.05rem;
-                 color:{color}; width:18px; text-align:center; flex-shrink:0;">{i + 1}</span>
-            <img src="{logo_url(row['Equipo'])}" width="26" style="flex-shrink:0;">
-            <div style="flex:1; min-width:0;">
-                <div style="color:{NEGRO}; font-weight:700; font-size:0.9rem; white-space:nowrap;
+                 color:{color}; width:16px; text-align:center; flex-shrink:0;">{i + 1}</span>
+            <img src="{logo_url(row['Equipo'])}" width="24" style="flex-shrink:0;">
+            <div style="flex:1; min-width:32px;">
+                <div style="color:{NEGRO}; font-weight:700; font-size:0.85rem; white-space:nowrap;
                      overflow:hidden; text-overflow:ellipsis;">{row['Jugador']}</div>
-                <div style="color:{GRIS}; font-size:0.68rem;">{row['Equipo']}</div>
+                <div style="color:{GRIS}; font-size:0.64rem;">{row['Equipo']}</div>
             </div>
             {secundarias_html}
-            <div style="text-align:center; min-width:60px; flex-shrink:0;">
-                <div style="color:{color}; font-weight:800; font-size:0.95rem;">{_valor(row[columna_valor])}</div>
-                <div style="color:{GRIS}; font-size:0.55rem; text-transform:uppercase; letter-spacing:0.03em;
+            <div style="text-align:center; min-width:52px; flex-shrink:0;">
+                <div style="color:{color}; font-weight:800; font-size:0.92rem;">{_valor(row[columna_valor])}</div>
+                <div style="color:{GRIS}; font-size:0.5rem; text-transform:uppercase; letter-spacing:0.02em;
                      white-space:nowrap;">{etiqueta_valor}</div>
             </div>
         </div>"""
@@ -1034,7 +1267,9 @@ def tarjeta_jugadores_html(
             <span style="font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.1rem;
                  color:#FFFFFF; letter-spacing:0.05em;">{titulo}</span>
         </div>
+        <div style="overflow-x:auto;">
         {filas_html}
+        </div>
     </div>
     """)
 
@@ -1403,7 +1638,7 @@ def mostrar_resultado(resultado, equipo_a, equipo_b, clima=None, local=None, com
             }
             for fila in resultado["desglose"]
         ]
-        st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
+        st.markdown(tabla_generica_html(pd.DataFrame(filas), color_borde="#BD4E1E", ancho_primera_col="1.4fr"), unsafe_allow_html=True)
 
         if clima:
             st.caption(f"Clima en {local}: {clima.get('temp_c', '?')}°C, viento {clima.get('viento_kmh', '?')} km/h")
@@ -1547,7 +1782,7 @@ if st.session_state.pagina == "inicio":
     encabezado_sitio("inicio")
 
     hero(
-        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">News</span>',
+        '<span style="color:#BD4E1E;">News</span>',
     )
 
     with st.spinner("Cargando noticias..."):
@@ -1592,7 +1827,6 @@ if st.session_state.pagina == "equipo_detalle":
         st.rerun()
 
     hero(
-        '<span style="color:#F1F4F9;">NFL</span> '
         f'<span style="color:#BD4E1E;">{NOMBRES_EQUIPO.get(equipo_sel, equipo_sel)} ({equipo_sel})</span>',
     )
     st.image(logo_url(equipo_sel), width=90)
@@ -1604,7 +1838,10 @@ if st.session_state.pagina == "equipo_detalle":
         if fila_eq.empty:
             st.info("No se encontró el standing de este equipo todavía.")
         else:
-            st.dataframe(fila_eq, use_container_width=True, hide_index=True)
+            # El equipo ya se muestra arriba (logo + nombre) — se omite la
+            # columna "Equipo" de la tabla por ser redundante.
+            fila_eq_mostrar = fila_eq.drop(columns=["Equipo"], errors="ignore")
+            st.markdown(tabla_generica_html(fila_eq_mostrar, color_borde="#BD4E1E", ancho_primera_col="1fr"), unsafe_allow_html=True)
     except Exception as e:
         st.info(f"No se pudo cargar el standing: {e}")
 
@@ -1612,7 +1849,7 @@ if st.session_state.pagina == "equipo_detalle":
     st.subheader("Calendario de la temporada")
     try:
         calendario_eq = calendario_equipo_cacheado(equipo_sel, season_equipo)
-        st.dataframe(calendario_eq, use_container_width=True, hide_index=True)
+        st.markdown(tabla_generica_html(calendario_eq, color_borde="#BD4E1E"), unsafe_allow_html=True)
     except Exception as e:
         st.info(f"No se pudo cargar el calendario: {e}")
 
@@ -1620,7 +1857,7 @@ if st.session_state.pagina == "equipo_detalle":
     st.subheader("Roster")
     try:
         roster_eq = roster_equipo_cacheado(equipo_sel, season_equipo)
-        st.dataframe(roster_eq, use_container_width=True, hide_index=True)
+        st.markdown(tabla_generica_html(roster_eq, color_borde="#BD4E1E"), unsafe_allow_html=True)
     except Exception as e:
         st.info(f"No se pudo cargar el roster: {e}")
 
@@ -1632,7 +1869,7 @@ if st.session_state.pagina == "equipo_detalle":
 # ============================================================
 if st.session_state.pagina == "lesiones":
     encabezado_sitio("lesiones")
-    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Injuries</span>')
+    hero('<span style="color:#BD4E1E;">Injuries</span>')
 
     season_lesiones = datetime.date.today().year
 
@@ -1851,7 +2088,7 @@ if st.session_state.pagina == "lesiones":
 # ============================================================
 if st.session_state.pagina == "scores":
     encabezado_sitio("scores")
-    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Scores</span>')
+    hero('<span style="color:#BD4E1E;">Scores</span>')
 
     season_scores = _temporada_nfl_actual()
 
@@ -1903,7 +2140,7 @@ if st.session_state.pagina == "scores":
 # ============================================================
 if st.session_state.pagina == "estadisticas":
     encabezado_sitio("estadisticas")
-    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Standings</span>')
+    hero('<span style="color:#BD4E1E;">Standings</span>')
 
     if st.button("Escenario de Playoffs", key="ir_a_playoffs", type="primary"):
         st.session_state.pagina = "playoffs"
@@ -2048,7 +2285,7 @@ if st.session_state.pagina == "playoffs":
 # ============================================================
 if st.session_state.pagina == "players":
     encabezado_sitio("players")
-    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Players</span>')
+    hero('<span style="color:#BD4E1E;">Players</span>')
 
     with st.container(key="selector_temporada_players"):
         anio_actual = _temporada_nfl_actual()
@@ -2071,11 +2308,26 @@ if st.session_state.pagina == "players":
             for col, pos in zip(st.columns(2), posiciones_orden[inicio:inicio + 2]):
                 with col:
                     config = POSICIONES_STATS_TRADICIONALES[pos]
-                    top5 = top_jugadores_por_posicion(jugadores_liga, pos, top_n=5)
+                    columnas_portada = config["columnas_portada"]
+                    etiqueta_a_columna = {etiqueta: columna for columna, etiqueta in columnas_portada}
+
+                    orden_label = st.pills(
+                        f"Ordenar {pos} por", list(etiqueta_a_columna.keys()),
+                        default=columnas_portada[0][1], required=True,
+                        key=f"orden_portada_{pos}", label_visibility="collapsed",
+                    )
+                    columna_orden_activa = etiqueta_a_columna.get(orden_label, config["orden"])
+
+                    top5 = top_jugadores_por_posicion(
+                        jugadores_liga, pos, top_n=5,
+                        columnas=columnas_portada, orden_por=columna_orden_activa,
+                    )
+                    columnas_secundarias_activas = [c for c in columnas_portada if c[0] != columna_orden_activa]
                     st.markdown(
                         tarjeta_jugadores_html(
                             f"TOP {pos} · {ETIQUETAS_POSICION_PLAYERS[pos]}", top5, COLORES_POSICION_PLAYERS[pos],
-                            columna_valor=config["orden"], etiqueta_valor=config["columnas"][0][1],
+                            columna_valor=columna_orden_activa, etiqueta_valor=orden_label,
+                            columnas_secundarias=columnas_secundarias_activas,
                         ),
                         unsafe_allow_html=True,
                     )
@@ -2145,20 +2397,34 @@ if st.session_state.pagina == "players_detalle":
     equipo_valor = None if equipo_filtro == "Todos" else equipo_filtro
 
     if posicion in POSICIONES_STATS_TRADICIONALES:
+        config = POSICIONES_STATS_TRADICIONALES[posicion]
+        columnas_detalle = config["columnas_detalle"]
+        etiqueta_a_columna = {etiqueta: columna for columna, etiqueta in columnas_detalle}
+
+        orden_label = st.pills(
+            "Ordenar por", list(etiqueta_a_columna.keys()),
+            default=columnas_detalle[0][1], required=True,
+            key=f"orden_detalle_{posicion}",
+        )
+        columna_orden_activa = etiqueta_a_columna.get(orden_label, config["orden"])
+
         with st.spinner("Cargando ranking..."):
             top_df = None
             try:
                 jugadores_liga = jugadores_liga_cacheada(season_detalle)
-                config = POSICIONES_STATS_TRADICIONALES[posicion]
-                top_df = top_jugadores_por_posicion(jugadores_liga, posicion, top_n=top_n, equipo=equipo_valor)
+                top_df = top_jugadores_por_posicion(
+                    jugadores_liga, posicion, top_n=top_n, equipo=equipo_valor,
+                    columnas=columnas_detalle, orden_por=columna_orden_activa,
+                )
             except Exception as e:
                 st.error(f"No se pudieron cargar las estadísticas de jugadores: {e}")
         if top_df is not None:
+            columnas_secundarias_activas = [c for c in columnas_detalle if c[0] != columna_orden_activa]
             st.markdown(
                 tarjeta_jugadores_html(
                     f"TOP {posicion} · {etiqueta_pos}", top_df, color_pos,
-                    columna_valor=config["orden"], etiqueta_valor=config["columnas"][0][1],
-                    columnas_secundarias=config["columnas"][1:],
+                    columna_valor=columna_orden_activa, etiqueta_valor=orden_label,
+                    columnas_secundarias=columnas_secundarias_activas,
                 ),
                 unsafe_allow_html=True,
             )
@@ -2226,7 +2492,7 @@ if st.session_state.pagina == "detalle":
 # ============================================================
 if st.session_state.pagina == "fantasy":
     encabezado_sitio("fantasy")
-    hero('<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Fantasy</span>')
+    hero('<span style="color:#BD4E1E;">Fantasy</span>')
 
     season_fantasy = datetime.date.today().year
 
@@ -2267,7 +2533,7 @@ if st.session_state.pagina == "fantasy":
                         f"Puntos calculados por nflverse ({'PPR' if 'ppr' in col_usada else 'estándar'}) "
                         f"para QB/RB/WR/TE — no incluye K/DST/IDP.{aviso_temporada}"
                     )
-                    st.dataframe(ranking, use_container_width=True, hide_index=True)
+                    st.markdown(tabla_generica_html(ranking, color_borde="#BD4E1E"), unsafe_allow_html=True)
                 except Exception as e:
                     st.info(f"No se pudo cargar el ranking de fantasy: {e}")
 
@@ -2320,16 +2586,20 @@ if st.session_state.pagina == "fantasy":
                 st.info(f"No se pudieron cargar los líderes por posición: {e}")
 
         if lideres is not None:
+            _ETIQUETAS_LIDERES = {
+                "player_name": "Jugador", "team": "team",
+                "passing_yards": "Yds pase", "rushing_yards": "Yds carrera", "receiving_yards": "Yds recep",
+            }
             col_pase, col_carrera, col_recepcion = st.columns(3)
             with col_pase:
                 st.markdown("**🏈 Mejores QB (yardas de pase)**")
-                st.dataframe(lideres["pase"], use_container_width=True, hide_index=True)
+                st.markdown(tabla_generica_html(lideres["pase"].rename(columns=_ETIQUETAS_LIDERES), color_borde="#BD4E1E"), unsafe_allow_html=True)
             with col_carrera:
                 st.markdown("**🏃 Mejores RB (yardas de carrera)**")
-                st.dataframe(lideres["carrera"], use_container_width=True, hide_index=True)
+                st.markdown(tabla_generica_html(lideres["carrera"].rename(columns=_ETIQUETAS_LIDERES), color_borde="#BD4E1E"), unsafe_allow_html=True)
             with col_recepcion:
                 st.markdown("**🙌 Mejores WR/TE (yardas de recepción)**")
-                st.dataframe(lideres["recepcion"], use_container_width=True, hide_index=True)
+                st.markdown(tabla_generica_html(lideres["recepcion"].rename(columns=_ETIQUETAS_LIDERES), color_borde="#BD4E1E"), unsafe_allow_html=True)
 
     st.stop()
 
@@ -2342,7 +2612,7 @@ if st.session_state.pagina == "fantasy":
 if st.session_state.pagina == "blog":
     encabezado_sitio("blog")
     hero(
-        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Insider</span>',
+        '<span style="color:#BD4E1E;">Insider</span>',
     )
 
     with st.spinner("Cargando Insider..."):
@@ -2398,7 +2668,7 @@ if st.session_state.pagina == "blog_archivo":
         st.rerun()
 
     hero(
-        '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Insider</span>',
+        '<span style="color:#BD4E1E;">Insider</span>',
         "Notas anteriores",
     )
 
@@ -2444,7 +2714,7 @@ if st.session_state.pagina == "articulo_detalle":
 # ============================================================
 encabezado_sitio("pronosticos")
 hero(
-    '<span style="color:#F1F4F9;">NFL</span> <span style="color:#BD4E1E;">Predictions</span>',
+    '<span style="color:#BD4E1E;">Predictions</span>',
     "Modelo de puntaje ponderado basado en estadísticas históricas, clima y mercado de apuestas.",
 )
 
